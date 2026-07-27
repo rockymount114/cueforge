@@ -106,3 +106,42 @@ CueForge follows a strict one-way dependency graph: `common → physics → coll
 ## License
 
 Dual-licensed under MIT or Apache-2.0, at your option. See [LICENSE](LICENSE).
+
+
+
+### Verification Summary
+
+  The full local verification suite was executed and passed with zero errors or lints:
+
+  • Formatting: cargo fmt --check passed cleanly.
+  • Clippy: cargo clippy --workspace -- -D warnings passed with 0 warnings across all 15
+  crates.
+  • Tests: cargo test --workspace passed 100% of unit, integration, and doc tests.
+  ──────
+  ### How to Start and Run the Project
+  #### 1. Prerequisites
+
+  Ensure Rust toolchain (MSRV 1.75+) is installed:
+
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+  #### 2. Run Verification Checks
+  To verify the entire workspace, run:
+    cargo fmt --check
+    cargo clippy --workspace -- -D warnings
+    cargo test --workspace
+
+  #### 3. Run the Interactive Simulation CLI
+
+  Launch the CueForge simulation demo binary:
+
+    cargo run --bin cueforge
+
+  When run, the application will:
+
+  1. Initialize a 9ft pool table with a cue ball and object balls.
+  2. Render an initial ASCII table view.
+  3. Consult cueforge-ai to solve for the ghost-ball target and optimal cut angle.
+  4. Strike the cue ball and step the 1000 Hz physics simulation deterministically forward.
+  5. Print the post-shot ASCII table state, event stream (collisions/pockets), rule
+  evaluation (fouls), and match statistics.

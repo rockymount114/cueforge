@@ -3,3 +3,5 @@ Cargo.lock.bak
 *.pdb
 .DS_Store
 *:Zone.Identifier
+
+test_result.md
