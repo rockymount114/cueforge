@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CueForge Studio — Interactive Simulation & Training UI</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Navigation Bar -->
+    <header class="navbar">
+      <div class="brand">
+        <div class="logo-icon">🎱</div>
+        <div class="brand-text">
+          <h1>CueForge Studio</h1>
+          <span class="badge">Phase 1 Engine UI</span>
+        </div>
+      </div>
+      <div class="nav-actions">
+        <button id="btn-reset-rack" class="btn btn-secondary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Reset Rack
+        </button>
+        <button id="btn-ai-hint" class="btn btn-primary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+          AI Coach Shot
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="main-layout">
+      <!-- Left Panel: Table Viewport -->
+      <section class="viewport-panel">
+        <div class="canvas-wrapper">
+          <canvas id="table-canvas" width="1000" height="520"></canvas>
+          <div id="canvas-overlay" class="canvas-overlay">
+            <div class="shot-status-badge" id="shot-status">Ready for Shot</div>
+          </div>
+        </div>
+
+        <!-- Controls Dock under Canvas -->
+        <div class="controls-dock">
+          <div class="control-group">
+            <label for="power-slider">Cue Speed (Power): <span id="power-val">2.50</span> m/s</label>
+            <input type="range" id="power-slider" min="0.5" max="6.0" step="0.1" value="2.5">
+          </div>
+
+          <div class="control-group">
+            <label for="elevation-slider">Cue Elevation Angle: <span id="elevation-val">0</span>°</label>
+            <input type="range" id="elevation-slider" min="0" max="60" step="1" value="0">
+          </div>
+
+          <div class="action-buttons">
+            <button id="btn-strike" class="btn btn-success btn-large">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              STRIKE CUE BALL
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Panel: Sidebar Inspector -->
+      <aside class="sidebar">
+        <!-- English / Tip Contact Selector -->
+        <div class="card english-card">
+          <h3>Tip Contact & English Spin</h3>
+          <div class="spin-selector-container">
+            <div class="ball-spin-target" id="spin-target">
+              <div class="spin-crosshair" id="spin-crosshair"></div>
+            </div>
+            <div class="spin-info">
+              <p>Top/Draw: <strong id="spin-y-val">0.00</strong></p>
+              <p>Side Spin: <strong id="spin-x-val">0.00</strong></p>
+              <button id="btn-reset-spin" class="btn-xs">Center Tip</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Shot Analysis & AI Recommendation -->
+        <div class="card ai-card">
+          <h3>AI Shot Analysis</h3>
+          <div id="ai-details" class="details-list">
+            <div class="detail-row">
+              <span>Target Ball:</span>
+              <strong id="ai-target-ball">Ball #1</strong>
+            </div>
+            <div class="detail-row">
+              <span>Target Pocket:</span>
+              <strong id="ai-target-pocket">Corner Top-Right</strong>
+            </div>
+            <div class="detail-row">
+              <span>Cut Angle:</span>
+              <strong id="ai-cut-angle">24.5°</strong>
+            </div>
+            <div class="detail-row">
+              <span>Shot Difficulty:</span>
+              <span class="badge badge-easy" id="ai-difficulty">Easy</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Match Statistics & Rule Status -->
+        <div class="card stats-card">
+          <h3>Match Statistics & Rules</h3>
+          <div class="stats-grid">
+            <div class="stat-box">
+              <span class="stat-num" id="stat-shots">0</span>
+              <span class="stat-label">Shots</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-num" id="stat-pots">0</span>
+              <span class="stat-label">Pots</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-num" id="stat-acc">0%</span>
+              <span class="stat-label">Accuracy</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-num" id="stat-fouls">0</span>
+              <span class="stat-label">Fouls</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Event Log -->
+        <div class="card log-card">
+          <h3>Physics Event Stream</h3>
+          <div class="event-log" id="event-log">
+            <div class="log-item info">Simulation initialized. 9-Ball rack ready.</div>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
