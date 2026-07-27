@@ -93,6 +93,7 @@ class CueForgeSimulation {
 
     this.isSimulating = false;
     this.isDraggingAim = false;
+    this.isBallInHand = false;
 
     this.pockets = [
       new Vector2(BedX, BedY),                             // Top Left
@@ -140,25 +141,103 @@ class CueForgeSimulation {
     }
 
     this.aimAngle = 0;
+    this.isBallInHand = false;
     this.logEvent('9-Ball rack set. Aim line ready.', 'info');
+    this.updateAIDetails();
+  }
+
+  respawnCueBall(customPos = null) {
+    let cueBall = this.balls.find(b => b.id === 0);
+    if (!cueBall) {
+      cueBall = new Ball(0, 0, 0);
+      this.balls.unshift(cueBall);
+    }
+
+    let spawnX = BedX + BedWidth * 0.25;
+    let spawnY = BedY + BedHeight * 0.5;
+
+    if (customPos) {
+      const minX = BedX + BallRadiusPX + 5;
+      const maxX = BedX + BedWidth - BallRadiusPX - 5;
+      const minY = BedY + BallRadiusPX + 5;
+      const maxY = BedY + BedHeight - BallRadiusPX - 5;
+
+      spawnX = Math.max(minX, Math.min(maxX, customPos.x));
+      spawnY = Math.max(minY, Math.min(maxY, customPos.y));
+    }
+
+    // Verify non-overlapping with active balls
+    let attempts = 0;
+    while (attempts < 30) {
+      let overlap = false;
+      for (const b of this.balls) {
+        if (b.id !== 0 && b.active) {
+          if (new Vector2(spawnX, spawnY).dist(b.pos) < BallRadiusPX * 2 + 2) {
+            overlap = true;
+            break;
+          }
+        }
+      }
+      if (!overlap) break;
+      spawnY += BallRadiusPX * 2.2;
+      if (spawnY > BedY + BedHeight - BallRadiusPX) {
+        spawnY = BedY + BallRadiusPX + 10;
+        spawnX += BallRadiusPX * 2.2;
+      }
+      attempts++;
+    }
+
+    cueBall.pos = new Vector2(spawnX, spawnY);
+    cueBall.vel = new Vector2(0, 0);
+    cueBall.active = true;
+    cueBall.state = 'Stationary';
+
+    this.isBallInHand = true;
+    document.getElementById('shot-status').innerText = 'Ball in Hand (Click table to place)';
+    document.getElementById('shot-status').style.color = '#3b82f6';
+    this.logEvent('Cue ball returned to table (Ball in Hand). Click table to position.', 'info');
     this.updateAIDetails();
   }
 
   bindEvents() {
     this.canvas.addEventListener('mousedown', (e) => {
       if (this.isSimulating) return;
-      this.isDraggingAim = true;
-      this.updateAimFromMouse(e);
+
+      const rect = this.canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      if (this.isBallInHand) {
+        this.respawnCueBall({ x: mx, y: my });
+        this.isBallInHand = false;
+        document.getElementById('shot-status').innerText = 'Ready for Shot';
+        document.getElementById('shot-status').style.color = '#10b981';
+      } else {
+        this.isDraggingAim = true;
+        this.updateAimFromMouse(e);
+      }
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (this.isDraggingAim && !this.isSimulating) {
+      if (this.isSimulating) return;
+      const rect = this.canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      if (this.isBallInHand) {
+        this.respawnCueBall({ x: mx, y: my });
+      } else if (this.isDraggingAim) {
         this.updateAimFromMouse(e);
       }
     });
 
     window.addEventListener('mouseup', () => {
       this.isDraggingAim = false;
+    });
+
+    // Place Cue Ball / Ball in Hand Button
+    document.getElementById('btn-place-cue').addEventListener('click', () => {
+      this.respawnCueBall();
     });
 
     // Cue Strike Button
@@ -240,7 +319,12 @@ class CueForgeSimulation {
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
 
-    const cueBall = this.balls.find(b => b.id === 0);
+    let cueBall = this.balls.find(b => b.id === 0);
+    if (!cueBall || !cueBall.active) {
+      this.respawnCueBall();
+      cueBall = this.balls.find(b => b.id === 0);
+    }
+
     if (cueBall && cueBall.active) {
       this.aimAngle = Math.atan2(my - cueBall.pos.y, mx - cueBall.pos.x);
       this.updateAIDetails();
@@ -249,8 +333,14 @@ class CueForgeSimulation {
 
   fireCueStrike() {
     if (this.isSimulating) return;
-    const cueBall = this.balls.find(b => b.id === 0);
-    if (!cueBall || !cueBall.active) return;
+
+    let cueBall = this.balls.find(b => b.id === 0);
+    if (!cueBall || !cueBall.active) {
+      this.respawnCueBall();
+      cueBall = this.balls.find(b => b.id === 0);
+    }
+
+    this.isBallInHand = false;
 
     // Apply impulse to cue ball
     const speedPX = this.cuePower * ScalePX;
@@ -270,8 +360,13 @@ class CueForgeSimulation {
   }
 
   applyAIRecommendation() {
-    const cueBall = this.balls.find(b => b.id === 0);
-    const target = this.balls.find(b => b.id === 1 && b.active);
+    let cueBall = this.balls.find(b => b.id === 0);
+    if (!cueBall || !cueBall.active) {
+      this.respawnCueBall();
+      cueBall = this.balls.find(b => b.id === 0);
+    }
+
+    const target = this.balls.find(b => b.id > 0 && b.active);
     if (!cueBall || !target) return;
 
     const targetPos = target.pos;
@@ -399,9 +494,16 @@ class CueForgeSimulation {
 
     if (!activeMovement && this.isSimulating) {
       this.isSimulating = false;
-      document.getElementById('shot-status').innerText = 'Ready for Shot';
-      document.getElementById('shot-status').style.color = '#10b981';
-      this.logEvent('Shot complete. Table stationary.', 'info');
+
+      // Check if cue ball was pocketed (scratched)
+      const cueBall = this.balls.find(b => b.id === 0);
+      if (!cueBall || !cueBall.active) {
+        this.respawnCueBall();
+      } else {
+        document.getElementById('shot-status').innerText = 'Ready for Shot';
+        document.getElementById('shot-status').style.color = '#10b981';
+        this.logEvent('Shot complete. Table stationary.', 'info');
+      }
     }
   }
 
@@ -433,7 +535,6 @@ class CueForgeSimulation {
     // Diamonds / Sights along rails
     ctx.fillStyle = '#f8fafc';
     for (let i = 1; i <= 3; i++) {
-      // Top and Bottom Rail sights
       ctx.beginPath(); ctx.arc(BedX + (BedWidth / 4) * i, BedY / 2, 3, 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.arc(BedX + (BedWidth / 4) * i, CanvasHeight - BedY / 2, 3, 0, Math.PI * 2); ctx.fill();
     }
