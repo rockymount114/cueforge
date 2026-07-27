@@ -1,0 +1,16 @@
+name: Question
+description: Ask a question about the project
+labels: ["question"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: >
+        Before asking, please check docs/architecture/Overview.md and the
+        relevant docs/ subdirectory — many design questions are already
+        answered there.

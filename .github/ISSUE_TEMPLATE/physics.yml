@@ -1,0 +1,46 @@
+name: Physics bug report
+description: A shot doesn't behave like it would on a real table
+labels: ["bug", "physics"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened vs. what should happen?
+      description: Describe the simulated behavior and how it differs from a real table.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction (shot input / replay file)
+      description: >
+        Attach a replay file or exact shot parameters
+        (see docs/architecture/Replay.md) if possible — physics bugs
+        without a deterministic repro are very hard to fix.
+    validations:
+      required: true
+  - type: input
+    id: reference
+    attributes:
+      label: Reference for expected behavior (if known)
+      description: A citation, video, or measurement supporting the expected outcome — see docs/physics/Calibration.md
+    validations:
+      required: false
+  - type: dropdown
+    id: phenomenon
+    attributes:
+      label: Related phenomenon (if known)
+      options:
+        - Collision
+        - Rolling/Sliding friction
+        - Spin/English
+        - Throw
+        - Squirt
+        - Swerve
+        - Massé
+        - Jump
+        - Rail/Cushion
+        - Pocket
+        - Unsure
+    validations:
+      required: false

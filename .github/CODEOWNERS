@@ -1,0 +1,8 @@
+# See docs/contributing/ for the full review policy.
+# Physics-critical crates require review from the physics maintainers group.
+
+/crates/physics/    @cueforge/physics-maintainers
+/crates/collision/  @cueforge/physics-maintainers
+/crates/spin/       @cueforge/physics-maintainers
+/docs/physics/       @cueforge/physics-maintainers
+/rfcs/               @cueforge/maintainers

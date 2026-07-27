@@ -1,0 +1,21 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify version matches tag
+        run: |
+          echo "TODO: verify workspace version matches pushed tag before publishing"
+      - name: Build release artifacts
+        run: cargo build --workspace --release
+      # Publishing steps (crates.io, GitHub Release) to be filled in
+      # once the workspace reaches its first tagged release (see
+      # ROADMAP.md and CHANGELOG.md versioning policy).

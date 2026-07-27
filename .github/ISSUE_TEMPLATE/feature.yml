@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest an idea or enhancement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: false
+  - type: checkboxes
+    id: rfc-check
+    attributes:
+      label: Scope check
+      options:
+        - label: I've checked rfcs/ and this doesn't duplicate an existing proposal
+        - label: I understand architectural changes need an RFC before a PR (see CONTRIBUTING.md)

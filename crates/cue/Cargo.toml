@@ -1,0 +1,13 @@
+[package]
+name = "cueforge-cue"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Cue input model: tip offset, impact force, cue elevation."
+
+[dependencies]
+cueforge-common = { path = "../common" }
+cueforge-physics = { path = "../physics" }
+cueforge-table = { path = "../table" }

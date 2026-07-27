@@ -1,0 +1,30 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/common",
+    "crates/physics",
+    "crates/collision",
+    "crates/spin",
+    "crates/table",
+    "crates/cue",
+    "crates/renderer",
+    "crates/replay",
+    "crates/ai",
+    "crates/trainer",
+    "crates/vision",
+    "crates/networking",
+    "crates/ui",
+    "crates/rules",
+    "crates/statistics",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cueforge/cueforge"
+rust-version = "1.75"
+
+[workspace.dependencies]
+# Shared dependency versions are pinned here once crates are implemented.
+# Adding a dependency to crates/physics, crates/collision, or crates/spin
+# requires an RFC per AGENTS.md.

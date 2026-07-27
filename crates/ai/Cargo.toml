@@ -1,0 +1,14 @@
+[package]
+name = "cueforge-ai"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Shot evaluation, position prediction, pattern recognition, safety analysis."
+
+[dependencies]
+cueforge-common = { path = "../common" }
+cueforge-physics = { path = "../physics" }
+cueforge-table = { path = "../table" }
+cueforge-cue = { path = "../cue" }

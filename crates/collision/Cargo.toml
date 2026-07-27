@@ -1,0 +1,12 @@
+[package]
+name = "cueforge-collision"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Ball-ball and ball-rail collision detection & impulse resolution."
+
+[dependencies]
+cueforge-common = { path = "../common" }
+cueforge-physics = { path = "../physics" }
