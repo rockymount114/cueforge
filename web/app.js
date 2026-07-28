@@ -1,6 +1,6 @@
 /**
  * CueForge Studio — Interactive Web UI Simulation Engine
- * Phase 1 Core Physics & Visual Renderer with WPA 9-Ball Rule Enforcement
+ * Phase 1 Core Physics & Visual Renderer with Simonis 860 Cloth Specifications
  */
 
 const CanvasWidth = 1000;
@@ -22,12 +22,46 @@ const BallRadiusMeters = 0.028575; // 2.25 inch diameter
 const BallRadiusPX = BallRadiusMeters * ScalePX;
 
 const RestitutionBall = 0.95;
-const RestitutionRail = 0.85;
-const Gravity = 9.81;
-const SlidingFrictionCoef = 0.20;
-const RollingFrictionCoef = 0.015;
+const RestitutionRail = 0.90;
+const Gravity = 9.80665;
 
 const PocketRadiusPX = 24;
+
+// Cloth Presets (9ball_cloth_spec.md)
+const ClothPresets = {
+  simonis_860: {
+    name: 'Simonis 860',
+    material: '90% Wool / 10% Nylon',
+    weave: 'Worsted (Napless)',
+    baseMuR: 0.015,
+    baseMuS: 0.20,
+    color: '#0055a5', // Tournament Blue
+  },
+  simonis_760: {
+    name: 'Simonis 760',
+    material: '70% Wool / 30% Nylon',
+    weave: 'Worsted (Napless)',
+    baseMuR: 0.012,
+    baseMuS: 0.18,
+    color: '#0f52ba', // Fast Blue
+  },
+  league_cloth: {
+    name: 'Standard League Cloth',
+    material: '75% Wool / 25% Nylon',
+    weave: 'Napped',
+    baseMuR: 0.022,
+    baseMuS: 0.23,
+    color: '#0d5c3a', // Classic Green
+  },
+  old_cloth: {
+    name: 'Old Bar Table Cloth',
+    material: 'Heavy Napped Wool',
+    weave: 'Napped',
+    baseMuR: 0.030,
+    baseMuS: 0.28,
+    color: '#155293',
+  },
+};
 
 // Ball Colors
 const BallColors = {
@@ -92,11 +126,16 @@ class CueForgeSimulation {
     this.isDraggingAim = false;
     this.isBallInHand = false;
 
+    // Cloth Parameters & Environmental State
+    this.currentClothKey = 'simonis_860';
+    this.humidity = 45; // % RH
+    this.temperature = 22; // °C
+
     // Shot tracking for WPA 9-Ball rules
     this.firstBallHit = null;
     this.railHitAfterContact = false;
     this.pocketedThisShot = [];
-    this.lowestActiveBall = 1;
+    this.targetBallBeforeShot = 1;
     this.consecutiveFouls = [0, 0];
     this.activePlayer = 0;
 
@@ -114,7 +153,34 @@ class CueForgeSimulation {
 
     this.initNineBallRack();
     this.bindEvents();
+    this.updateClothUI();
     this.startLoop();
+  }
+
+  getEffectiveFriction() {
+    const preset = ClothPresets[this.currentClothKey] || ClothPresets.simonis_860;
+    const humFactorR = 1 + 0.005 * (this.humidity - 45);
+    const tempFactorR = 1 - 0.003 * (this.temperature - 22);
+
+    const humFactorS = 1 + 0.003 * (this.humidity - 45);
+    const tempFactorS = 1 - 0.002 * (this.temperature - 22);
+
+    return {
+      mu_r: Math.max(0.005, preset.baseMuR * humFactorR * tempFactorR),
+      mu_s: Math.max(0.05, preset.baseMuS * humFactorS * tempFactorS),
+      color: preset.color,
+      name: preset.name,
+      material: preset.material,
+      weave: preset.weave,
+    };
+  }
+
+  updateClothUI() {
+    const eff = this.getEffectiveFriction();
+    document.getElementById('cloth-material').innerText = eff.material;
+    document.getElementById('cloth-weave').innerText = eff.weave;
+    document.getElementById('cloth-mu-r').innerText = eff.mu_r.toFixed(3);
+    document.getElementById('cloth-mu-s').innerText = eff.mu_s.toFixed(2);
   }
 
   getLowestRemainingBall() {
@@ -134,7 +200,6 @@ class CueForgeSimulation {
     const r = BallRadiusPX;
     const dx = r * 1.732;
 
-    // 9-Ball Diamond Rack layout
     const positions = [
       { id: 1, x: rackX, y: rackY },
       { id: 2, x: rackX + dx, y: rackY - r },
@@ -153,9 +218,9 @@ class CueForgeSimulation {
 
     this.aimAngle = 0;
     this.isBallInHand = false;
-    this.lowestActiveBall = 1;
+    this.targetBallBeforeShot = 1;
     this.consecutiveFouls = [0, 0];
-    this.logEvent('WPA 9-Ball rack set. Aim line ready (Target: Ball #1).', 'info');
+    this.logEvent('WPA 9-Ball rack set on Simonis 860 cloth. Target: Ball #1.', 'info');
     this.updateAIDetails();
   }
 
@@ -242,6 +307,28 @@ class CueForgeSimulation {
 
     window.addEventListener('mouseup', () => {
       this.isDraggingAim = false;
+    });
+
+    // Cloth Selectors & Sliders
+    const clothSelect = document.getElementById('cloth-preset-select');
+    clothSelect.addEventListener('change', (e) => {
+      this.currentClothKey = e.target.value;
+      this.updateClothUI();
+      this.logEvent(`Cloth changed to ${ClothPresets[this.currentClothKey].name}`, 'info');
+    });
+
+    const humiditySlider = document.getElementById('humidity-slider');
+    humiditySlider.addEventListener('input', (e) => {
+      this.humidity = parseInt(e.target.value);
+      document.getElementById('humidity-val').innerText = this.humidity;
+      this.updateClothUI();
+    });
+
+    const tempSlider = document.getElementById('temp-slider');
+    tempSlider.addEventListener('input', (e) => {
+      this.temperature = parseInt(e.target.value);
+      document.getElementById('temp-val').innerText = this.temperature;
+      this.updateClothUI();
     });
 
     document.getElementById('btn-place-cue').addEventListener('click', () => {
@@ -347,6 +434,7 @@ class CueForgeSimulation {
     this.firstBallHit = null;
     this.railHitAfterContact = false;
     this.pocketedThisShot = [];
+    this.targetBallBeforeShot = this.getLowestRemainingBall();
 
     const speedPX = this.cuePower * ScalePX;
     const dirX = Math.cos(this.aimAngle);
@@ -361,7 +449,7 @@ class CueForgeSimulation {
     document.getElementById('shot-status').innerText = 'Shot Executing...';
     document.getElementById('shot-status').style.color = '#f59e0b';
 
-    this.logEvent(`Cue struck (Power: ${this.cuePower.toFixed(2)} m/s, Rotation Target: Ball #${this.getLowestRemainingBall()})`, 'info');
+    this.logEvent(`Cue struck (Power: ${this.cuePower.toFixed(2)} m/s, Target: Ball #${this.targetBallBeforeShot})`, 'info');
   }
 
   applyAIRecommendation() {
@@ -399,7 +487,7 @@ class CueForgeSimulation {
   }
 
   evaluateShotRules() {
-    const lowest = this.getLowestRemainingBall();
+    const lowestRequired = this.targetBallBeforeShot || this.getLowestRemainingBall();
     let fouls = [];
 
     const cueBall = this.balls.find(b => b.id === 0);
@@ -409,8 +497,8 @@ class CueForgeSimulation {
 
     if (!this.firstBallHit) {
       fouls.push('No Contact');
-    } else if (this.firstBallHit.id !== lowest) {
-      fouls.push(`Wrong Ball First (Hit #${this.firstBallHit.id}, Required #${lowest})`);
+    } else if (this.firstBallHit.id !== lowestRequired) {
+      fouls.push(`Wrong Ball First (Hit #${this.firstBallHit.id}, Required #${lowestRequired})`);
     }
 
     if (this.firstBallHit && this.pocketedThisShot.length === 0 && !this.railHitAfterContact) {
@@ -429,22 +517,27 @@ class CueForgeSimulation {
       this.respawnCueBall();
     } else {
       // Legal Shot
+      document.getElementById('shot-status').innerText = 'Ready for Shot';
+      document.getElementById('shot-status').style.color = '#10b981';
+
       if (this.pocketedThisShot.includes(9)) {
         this.logEvent('VICTORY! Legally pocketed the 9-Ball!', 'pocket');
         alert('🎉 VICTORY! Legally pocketed the 9-Ball!');
       } else if (this.pocketedThisShot.length > 0) {
-        this.logEvent(`Legal Shot: Pocketed ${this.pocketedThisShot.length} ball(s).`, 'pocket');
+        this.logEvent(`Legal Shot: Pocketed ${this.pocketedThisShot.length} ball(s). Continue shooting.`, 'pocket');
       } else {
         this.logEvent('Legal Safety / Position shot completed.', 'info');
       }
+      this.updateAIDetails();
     }
   }
 
   stepPhysics(dt) {
     let activeMovement = false;
+    const eff = this.getEffectiveFriction();
     const g = Gravity;
-    const mu_s = SlidingFrictionCoef;
-    const mu_r = RollingFrictionCoef;
+    const mu_s = eff.mu_s;
+    const mu_r = eff.mu_r;
 
     // 1. Pairwise Collisions
     for (let i = 0; i < this.balls.length; i++) {
@@ -471,7 +564,6 @@ class CueForgeSimulation {
             b1.state = 'Sliding';
             b2.state = 'Sliding';
 
-            // Track First Contact for Rotation Rule
             if (!this.firstBallHit) {
               if (b1.id === 0) this.firstBallHit = b2;
               else if (b2.id === 0) this.firstBallHit = b1;
@@ -558,18 +650,24 @@ class CueForgeSimulation {
 
   draw() {
     const ctx = this.ctx;
+    const eff = this.getEffectiveFriction();
+
     ctx.clearRect(0, 0, CanvasWidth, CanvasHeight);
 
+    // Wooden Rail Frame
     ctx.fillStyle = '#2d1810';
     ctx.fillRect(0, 0, CanvasWidth, CanvasHeight);
 
-    ctx.fillStyle = '#0d5c3a';
+    // Slate Cloth Bed (Simonis 860 Tournament Blue / Selected Cloth Color)
+    ctx.fillStyle = eff.color;
     ctx.fillRect(BedX, BedY, BedWidth, BedHeight);
 
-    ctx.strokeStyle = '#0a422a';
+    // Cushion Borders
+    ctx.strokeStyle = '#022c22';
     ctx.lineWidth = 4;
     ctx.strokeRect(BedX, BedY, BedWidth, BedHeight);
 
+    // Diamonds / Sights along rails
     ctx.fillStyle = '#f8fafc';
     for (let i = 1; i <= 3; i++) {
       ctx.beginPath(); ctx.arc(BedX + (BedWidth / 4) * i, BedY / 2, 3, 0, Math.PI * 2); ctx.fill();

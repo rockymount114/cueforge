@@ -17,7 +17,7 @@
         <div class="logo-icon">🎱</div>
         <div class="brand-text">
           <h1>CueForge Studio</h1>
-          <span class="badge">Phase 1 Engine UI</span>
+          <span class="badge">Simonis 860 Worsted Spec</span>
         </div>
       </div>
       <div class="nav-actions">
@@ -70,6 +70,49 @@
 
       <!-- Right Panel: Sidebar Inspector -->
       <aside class="sidebar">
+        <!-- Cloth & Environmental Settings Card -->
+        <div class="card cloth-card">
+          <h3>Table Cloth Specification</h3>
+          <div class="control-group">
+            <label for="cloth-preset-select">Cloth Preset:</label>
+            <select id="cloth-preset-select" class="form-select">
+              <option value="simonis_860" selected>Simonis 860 (Tournament Blue)</option>
+              <option value="simonis_760">Simonis 760 (Fast Blue)</option>
+              <option value="league_cloth">Standard League (Classic Green)</option>
+              <option value="old_cloth">Old Bar Table (Heavy Napped)</option>
+            </select>
+          </div>
+          <div class="details-list" style="margin-top: 8px;">
+            <div class="detail-row">
+              <span>Material:</span>
+              <strong id="cloth-material">90% Wool / 10% Nylon</strong>
+            </div>
+            <div class="detail-row">
+              <span>Weave:</span>
+              <strong id="cloth-weave">Worsted (Napless)</strong>
+            </div>
+            <div class="detail-row">
+              <span>Rolling Friction (&mu;<sub>r</sub>):</span>
+              <strong id="cloth-mu-r">0.015</strong>
+            </div>
+            <div class="detail-row">
+              <span>Sliding Friction (&mu;<sub>s</sub>):</span>
+              <strong id="cloth-mu-s">0.20</strong>
+            </div>
+          </div>
+
+          <div class="env-sliders" style="margin-top: 10px;">
+            <div class="control-group">
+              <label for="humidity-slider">Humidity: <span id="humidity-val">45</span>% RH</label>
+              <input type="range" id="humidity-slider" min="20" max="80" step="1" value="45">
+            </div>
+            <div class="control-group">
+              <label for="temp-slider">Temperature: <span id="temp-val">22</span>°C</label>
+              <input type="range" id="temp-slider" min="15" max="32" step="1" value="22">
+            </div>
+          </div>
+        </div>
+
         <!-- English / Tip Contact Selector -->
         <div class="card english-card">
           <h3>Tip Contact & English Spin</h3>
@@ -135,7 +178,7 @@
         <div class="card log-card">
           <h3>Physics Event Stream</h3>
           <div class="event-log" id="event-log">
-            <div class="log-item info">Simulation initialized. 9-Ball rack ready.</div>
+            <div class="log-item info">Simulation initialized. Simonis 860 cloth loaded.</div>
           </div>
         </div>
       </aside>

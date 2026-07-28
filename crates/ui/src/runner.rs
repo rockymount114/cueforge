@@ -30,6 +30,24 @@ pub fn run_simulation_demo() {
     world.add_ball(ball_2);
     world.add_ball(ball_3);
 
+    println!("--- Table Cloth Specifications ---");
+    println!("  Cloth: {}", table.cloth.name);
+    println!("  Material: {}", table.cloth.material);
+    println!("  Weave: {:?}", table.cloth.weave);
+    println!("  Color: {} (Tournament Blue)", table.cloth.hex_color);
+    println!(
+        "  Rolling Friction (μ_r): {:.3}",
+        table.cloth.effective_rolling_friction()
+    );
+    println!(
+        "  Sliding Friction (μ_s): {:.2}",
+        table.cloth.effective_sliding_friction()
+    );
+    println!(
+        "  Environment: {:.1}% RH, {:.1}°C\n",
+        table.cloth.humidity_percent, table.cloth.temperature_celsius
+    );
+
     println!("--- Initial Table State ---");
     println!("{}", render_ascii_table(&world, &table, 40, 20));
 

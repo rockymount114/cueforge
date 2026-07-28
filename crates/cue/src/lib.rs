@@ -5,19 +5,29 @@
 use cueforge_common::{Kilograms, Meters, MetersPerSecond, Radians, Vec3};
 use cueforge_physics::{Ball, MotionState};
 
-/// Physical properties of the cue stick.
+/// Physical properties of the cue stick based on `cue-specification.md`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CueStick {
+    /// Overall cue length (58 in = 1.473 m).
+    pub length: Meters,
+    /// Cue mass (standard 19 oz ~ 0.5388 kg).
     pub mass: Kilograms,
+    /// Cue tip radius (12.5 mm tip diameter / 2 = 0.00625 m).
     pub tip_radius: Meters,
+    /// Maximum practical tip offset without miscue (10 mm = 0.010 m).
+    pub max_tip_offset: Meters,
+    /// Maximum break stroke speed (10.0 m/s).
+    pub break_speed: MetersPerSecond,
 }
 
 impl Default for CueStick {
     fn default() -> Self {
         Self {
-            // Standard 19 oz cue stick ~ 0.538 kg
-            mass: Kilograms(0.538),
-            tip_radius: Meters(0.0065),
+            length: Meters(1.473),
+            mass: Kilograms(0.5388),
+            tip_radius: Meters(0.00625),
+            max_tip_offset: Meters(0.010),
+            break_speed: MetersPerSecond(10.0),
         }
     }
 }
@@ -56,9 +66,10 @@ pub fn strike_cue_ball(cue: &CueStick, strike: &CueStrike, cue_ball: &mut Ball) 
     let m_ball = cue_ball.mass.0;
     let m_cue = cue.mass.0;
 
-    // Contact tip offset relative to ball radius (clamped to physical ball radius safety 0.85 R)
-    let a = strike.offset_x.clamp(-0.85, 0.85) * r_ball;
-    let b = strike.offset_y.clamp(-0.85, 0.85) * r_ball;
+    // Contact tip offset relative to ball radius (clamped to physical ball radius safety 0.85 R or max_tip_offset)
+    let max_offset_ratio = (cue.max_tip_offset.0 / r_ball).min(0.85);
+    let a = strike.offset_x.clamp(-max_offset_ratio, max_offset_ratio) * r_ball;
+    let b = strike.offset_y.clamp(-max_offset_ratio, max_offset_ratio) * r_ball;
 
     let phi = strike.azimuth.0;
     let theta = strike.elevation.0;
@@ -108,4 +119,19 @@ pub fn strike_cue_ball(cue: &CueStick, strike: &CueStrike, cue_ball: &mut Ball) 
     cue_ball.velocity = Vec3::new(v0.x, v0.y, 0.0);
     cue_ball.angular_velocity = w0;
     cue_ball.state = MotionState::Sliding;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cue_stick_defaults() {
+        let cue = CueStick::default();
+        assert_eq!(cue.length.0, 1.473);
+        assert_eq!(cue.mass.0, 0.5388);
+        assert_eq!(cue.tip_radius.0, 0.00625);
+        assert_eq!(cue.max_tip_offset.0, 0.010);
+        assert_eq!(cue.break_speed.0, 10.0);
+    }
 }

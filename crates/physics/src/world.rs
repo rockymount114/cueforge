@@ -26,8 +26,8 @@ impl Default for WorldConfig {
             spinning_friction_coef: 0.005,
             restitution_ball_ball: 0.95,
             ball_friction_coef: 0.05,
-            gravity: 9.81,
-            stationary_velocity_threshold: 1e-4,
+            gravity: 9.80665,
+            stationary_velocity_threshold: 0.01,
         }
     }
 }
