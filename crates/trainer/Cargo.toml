@@ -11,4 +11,5 @@ description = "Drill generation and progress tracking, built on crates/ai."
 cueforge-common = { path = "../common" }
 cueforge-physics = { path = "../physics" }
 cueforge-table = { path = "../table" }
+cueforge-rules = { path = "../rules" }
 cueforge-ai = { path = "../ai" }

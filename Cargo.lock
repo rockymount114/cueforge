@@ -114,6 +114,7 @@ dependencies = [
  "cueforge-ai",
  "cueforge-common",
  "cueforge-physics",
+ "cueforge-rules",
  "cueforge-table",
 ]
 

@@ -95,7 +95,11 @@ pub fn run_simulation_demo() {
     println!("  Fouls: {:?}", result.fouls);
 
     // Track Statistics
-    stats.record_shot(&result, 1.2);
+    let final_pos = world
+        .get_ball(BallId(0))
+        .map(|b| b.position.to_vec2())
+        .unwrap_or_default();
+    stats.record_shot(&result, 1.2, final_pos, table.width.0, table.length.0);
     println!("\n--- Match Statistics ---");
     println!("  Total Shots: {}", stats.total_shots);
     println!("  Successful Pots: {}", stats.successful_pots);

@@ -1,6 +1,6 @@
 //! `cueforge-rules`
 //!
-//! Game variant rules: 8-ball, 9-ball, straight pool, foul evaluation, scoring state.
+//! Game variant rules: 8-ball, 9-ball, straight pool, foul evaluation, scoring state machine.
 
 use cueforge_physics::{BallId, Event};
 
@@ -10,6 +10,25 @@ pub enum GameVariant {
     EightBall,
     NineBall,
     StraightPool,
+}
+
+/// Ball group classification in 8-Ball.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BallGroup {
+    Solids,    // Balls 1..=7
+    Stripes,   // Balls 9..=15
+    EightBall, // Ball 8
+}
+
+impl BallGroup {
+    pub fn for_ball(id: BallId) -> Option<Self> {
+        match id.0 {
+            1..=7 => Some(BallGroup::Solids),
+            8 => Some(BallGroup::EightBall),
+            9..=15 => Some(BallGroup::Stripes),
+            _ => None,
+        }
+    }
 }
 
 /// Foul types in cue sports.
@@ -25,7 +44,7 @@ pub enum FoulType {
     NoRailContact,
 }
 
-/// Outcome of evaluating a shot's physical events.
+/// Outcome of evaluating physical events from a shot.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ShotResult {
     pub cue_ball_scratched: bool,
@@ -36,13 +55,86 @@ pub struct ShotResult {
     pub is_valid: bool,
 }
 
-/// Rule engine evaluating events against active game state.
+/// Outcome of a turn after evaluating rules state machine.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TurnOutcome {
+    KeepTurn,
+    SwitchTurn { ball_in_hand: bool },
+    GameOver { winner: usize },
+}
+
+/// State container for an 8-Ball match.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EightBallState {
+    pub table_open: bool,
+    pub player_groups: [Option<BallGroup>; 2],
+    pub active_player: usize,
+    pub winner: Option<usize>,
+}
+
+impl Default for EightBallState {
+    fn default() -> Self {
+        Self {
+            table_open: true,
+            player_groups: [None, None],
+            active_player: 0,
+            winner: None,
+        }
+    }
+}
+
+/// State container for a 9-Ball match.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NineBallState {
+    pub lowest_active_ball: u32,
+    pub consecutive_fouls: [u8; 2],
+    pub active_player: usize,
+    pub winner: Option<usize>,
+}
+
+impl Default for NineBallState {
+    fn default() -> Self {
+        Self {
+            lowest_active_ball: 1,
+            consecutive_fouls: [0, 0],
+            active_player: 0,
+            winner: None,
+        }
+    }
+}
+
+/// State container for a Straight Pool (14.1 Continuous) match.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StraightPoolState {
+    pub scores: [i32; 2],
+    pub target_score: i32,
+    pub consecutive_fouls: [u8; 2],
+    pub active_player: usize,
+    pub winner: Option<usize>,
+    pub active_rack_count: u32,
+}
+
+impl Default for StraightPoolState {
+    fn default() -> Self {
+        Self {
+            scores: [0, 0],
+            target_score: 15,
+            consecutive_fouls: [0, 0],
+            active_player: 0,
+            winner: None,
+            active_rack_count: 1,
+        }
+    }
+}
+
+/// Unified Rule Engine evaluating events against active game state.
 #[derive(Debug, Clone)]
 pub struct RuleEngine {
     pub variant: GameVariant,
     pub cue_ball_id: BallId,
-    pub active_player: usize,
-    pub player_scores: [u32; 2],
+    pub eight_ball_state: EightBallState,
+    pub nine_ball_state: NineBallState,
+    pub straight_pool_state: StraightPoolState,
 }
 
 impl RuleEngine {
@@ -50,12 +142,13 @@ impl RuleEngine {
         Self {
             variant,
             cue_ball_id,
-            active_player: 0,
-            player_scores: [0, 0],
+            eight_ball_state: EightBallState::default(),
+            nine_ball_state: NineBallState::default(),
+            straight_pool_state: StraightPoolState::default(),
         }
     }
 
-    /// Evaluate shot events stream produced by `World::step`.
+    /// Evaluate raw physical events from a shot simulation.
     pub fn evaluate_shot(&self, events: &[Event]) -> ShotResult {
         let mut cue_ball_scratched = false;
         let mut first_ball_struck = None;
@@ -108,5 +201,224 @@ impl RuleEngine {
             fouls,
             is_valid,
         }
+    }
+
+    /// Process turn progression for 8-Ball.
+    pub fn process_eight_ball(&mut self, shot: &ShotResult) -> TurnOutcome {
+        if let Some(w) = self.eight_ball_state.winner {
+            return TurnOutcome::GameOver { winner: w };
+        }
+
+        let active = self.eight_ball_state.active_player;
+        let opponent = 1 - active;
+
+        // Check if 8-ball was pocketed
+        if shot.pocketed_balls.contains(&BallId(8)) {
+            if shot.cue_ball_scratched || !shot.fouls.is_empty() {
+                // Loss if pocketed 8-ball on a foul/scratch
+                self.eight_ball_state.winner = Some(opponent);
+                return TurnOutcome::GameOver { winner: opponent };
+            }
+            self.eight_ball_state.winner = Some(active);
+            return TurnOutcome::GameOver { winner: active };
+        }
+
+        if !shot.is_valid {
+            self.eight_ball_state.active_player = opponent;
+            return TurnOutcome::SwitchTurn { ball_in_hand: true };
+        }
+
+        // Group assignment if table is open
+        if self.eight_ball_state.table_open && !shot.pocketed_balls.is_empty() {
+            for ball in &shot.pocketed_balls {
+                if let Some(group) = BallGroup::for_ball(*ball) {
+                    if group != BallGroup::EightBall {
+                        let opp_group = match group {
+                            BallGroup::Solids => BallGroup::Stripes,
+                            BallGroup::Stripes => BallGroup::Solids,
+                            _ => unreachable!(),
+                        };
+                        self.eight_ball_state.player_groups[active] = Some(group);
+                        self.eight_ball_state.player_groups[opponent] = Some(opp_group);
+                        self.eight_ball_state.table_open = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if !shot.pocketed_balls.is_empty() {
+            TurnOutcome::KeepTurn
+        } else {
+            self.eight_ball_state.active_player = opponent;
+            TurnOutcome::SwitchTurn {
+                ball_in_hand: false,
+            }
+        }
+    }
+
+    /// Process turn progression for 9-Ball.
+    pub fn process_nine_ball(&mut self, shot: &ShotResult) -> TurnOutcome {
+        if let Some(w) = self.nine_ball_state.winner {
+            return TurnOutcome::GameOver { winner: w };
+        }
+
+        let active = self.nine_ball_state.active_player;
+        let opponent = 1 - active;
+
+        let mut foul_committed = !shot.is_valid;
+        if let Some(first) = shot.first_ball_struck {
+            if first.0 != self.nine_ball_state.lowest_active_ball {
+                foul_committed = true;
+            }
+        } else {
+            foul_committed = true;
+        }
+
+        if foul_committed {
+            self.nine_ball_state.consecutive_fouls[active] += 1;
+            if self.nine_ball_state.consecutive_fouls[active] >= 3 {
+                // 3 consecutive fouls -> loss
+                self.nine_ball_state.winner = Some(opponent);
+                return TurnOutcome::GameOver { winner: opponent };
+            }
+            self.nine_ball_state.active_player = opponent;
+            return TurnOutcome::SwitchTurn { ball_in_hand: true };
+        }
+
+        // Reset foul counter on legal shot
+        self.nine_ball_state.consecutive_fouls[active] = 0;
+
+        // Check 9-ball potted
+        if shot.pocketed_balls.contains(&BallId(9)) {
+            self.nine_ball_state.winner = Some(active);
+            return TurnOutcome::GameOver { winner: active };
+        }
+
+        // Advance lowest active ball if potted
+        for ball in &shot.pocketed_balls {
+            if ball.0 == self.nine_ball_state.lowest_active_ball {
+                self.nine_ball_state.lowest_active_ball += 1;
+            }
+        }
+
+        if !shot.pocketed_balls.is_empty() {
+            TurnOutcome::KeepTurn
+        } else {
+            self.nine_ball_state.active_player = opponent;
+            TurnOutcome::SwitchTurn {
+                ball_in_hand: false,
+            }
+        }
+    }
+
+    /// Process turn progression for Straight Pool (14.1 Continuous).
+    pub fn process_straight_pool(&mut self, shot: &ShotResult) -> TurnOutcome {
+        if let Some(w) = self.straight_pool_state.winner {
+            return TurnOutcome::GameOver { winner: w };
+        }
+
+        let active = self.straight_pool_state.active_player;
+        let opponent = 1 - active;
+
+        if !shot.is_valid {
+            self.straight_pool_state.scores[active] -= 1;
+            self.straight_pool_state.consecutive_fouls[active] += 1;
+
+            if self.straight_pool_state.consecutive_fouls[active] >= 3 {
+                self.straight_pool_state.scores[active] -= 15;
+                self.straight_pool_state.consecutive_fouls[active] = 0;
+            }
+
+            self.straight_pool_state.active_player = opponent;
+            return TurnOutcome::SwitchTurn { ball_in_hand: true };
+        }
+
+        self.straight_pool_state.consecutive_fouls[active] = 0;
+        let points = shot.pocketed_balls.len() as i32;
+        self.straight_pool_state.scores[active] += points;
+
+        if self.straight_pool_state.scores[active] >= self.straight_pool_state.target_score {
+            self.straight_pool_state.winner = Some(active);
+            return TurnOutcome::GameOver { winner: active };
+        }
+
+        if points > 0 {
+            TurnOutcome::KeepTurn
+        } else {
+            self.straight_pool_state.active_player = opponent;
+            TurnOutcome::SwitchTurn {
+                ball_in_hand: false,
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cueforge_physics::BallId;
+
+    #[test]
+    fn test_eight_ball_group_assignment() {
+        let mut engine = RuleEngine::new(GameVariant::EightBall, BallId(0));
+        let shot = ShotResult {
+            cue_ball_scratched: false,
+            first_ball_struck: Some(BallId(3)),
+            pocketed_balls: vec![BallId(3)],
+            rail_hit_after_contact: true,
+            fouls: vec![],
+            is_valid: true,
+        };
+
+        let outcome = engine.process_eight_ball(&shot);
+        assert_eq!(outcome, TurnOutcome::KeepTurn);
+        assert_eq!(
+            engine.eight_ball_state.player_groups[0],
+            Some(BallGroup::Solids)
+        );
+        assert_eq!(
+            engine.eight_ball_state.player_groups[1],
+            Some(BallGroup::Stripes)
+        );
+        assert!(!engine.eight_ball_state.table_open);
+    }
+
+    #[test]
+    fn test_nine_ball_three_foul_rule() {
+        let mut engine = RuleEngine::new(GameVariant::NineBall, BallId(0));
+        let foul_shot = ShotResult {
+            cue_ball_scratched: true,
+            first_ball_struck: None,
+            pocketed_balls: vec![],
+            rail_hit_after_contact: false,
+            fouls: vec![FoulType::Scratch, FoulType::NoContact],
+            is_valid: false,
+        };
+
+        engine.process_nine_ball(&foul_shot);
+        engine.nine_ball_state.active_player = 0; // Force same player for 3 fouls test
+        engine.process_nine_ball(&foul_shot);
+        engine.nine_ball_state.active_player = 0;
+        let outcome = engine.process_nine_ball(&foul_shot);
+
+        assert_eq!(outcome, TurnOutcome::GameOver { winner: 1 });
+    }
+
+    #[test]
+    fn test_straight_pool_scoring() {
+        let mut engine = RuleEngine::new(GameVariant::StraightPool, BallId(0));
+        let shot = ShotResult {
+            cue_ball_scratched: false,
+            first_ball_struck: Some(BallId(1)),
+            pocketed_balls: vec![BallId(1), BallId(2)],
+            rail_hit_after_contact: true,
+            fouls: vec![],
+            is_valid: true,
+        };
+
+        let outcome = engine.process_straight_pool(&shot);
+        assert_eq!(outcome, TurnOutcome::KeepTurn);
+        assert_eq!(engine.straight_pool_state.scores[0], 2);
     }
 }
