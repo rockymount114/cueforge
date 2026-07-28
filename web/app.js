@@ -250,6 +250,15 @@ class CueForgeSimulation {
     this.pocketedThisShot = [];
     this.targetBallBeforeShot = null;
 
+    this.pockets = [
+      new Vector2(BedX, BedY),                              // Top Left
+      new Vector2(BedX + BedWidth / 2, BedY - 6),            // Top Center
+      new Vector2(BedX + BedWidth, BedY),                   // Top Right
+      new Vector2(BedX, BedY + BedHeight),                   // Bottom Left
+      new Vector2(BedX + BedWidth / 2, BedY + BedHeight + 6), // Bottom Center
+      new Vector2(BedX + BedWidth, BedY + BedHeight),        // Bottom Right
+    ];
+
     this.stats = { shots: 0, pots: 0, fouls: 0 };
     this.eventLogs = [];
 
