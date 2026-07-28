@@ -13,6 +13,6 @@ jobs:
       - name: Check for broken relative links in docs/
         run: |
           echo "TODO: wire up a markdown link checker (e.g. lychee) here"
-      - name: Check for TODO: verify count (informational)
+      - name: "Check for TODO: verify count (informational)"
         run: |
           grep -r "TODO: verify" docs/ || true
