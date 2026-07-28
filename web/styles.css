@@ -538,3 +538,72 @@ input[type="range"] {
   justify-content: flex-end;
   background: rgba(15, 23, 42, 0.4);
 }
+
+/* Game Finish Modal Component Styles */
+.finish-modal-card {
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  box-shadow: 0 25px 60px -10px rgba(245, 158, 11, 0.25), 0 0 30px rgba(0, 0, 0, 0.8);
+}
+
+.finish-header {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.05) 100%);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.finish-header h2 {
+  color: #fbbf24;
+}
+
+.finish-body {
+  text-align: center;
+  padding: 1.75rem 1.5rem;
+}
+
+.trophy-badge {
+  font-size: 3.5rem;
+  margin-bottom: 0.5rem;
+  filter: drop-shadow(0 4px 12px rgba(245, 158, 11, 0.4));
+  animation: bounceTrophy 2s infinite ease-in-out;
+}
+
+@keyframes bounceTrophy {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.finish-subtitle {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
+.finish-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.finish-stat-box {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.finish-num {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #38bdf8;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.finish-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}

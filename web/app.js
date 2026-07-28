@@ -111,6 +111,115 @@ class Ball {
   }
 }
 
+/**
+ * UI Component Framework — Reusable Modal Popup System
+ */
+class UIComponent {
+  constructor(elementId) {
+    this.container = typeof elementId === 'string' ? document.getElementById(elementId) : elementId;
+  }
+
+  show() {
+    if (this.container) {
+      this.container.classList.remove('hidden');
+      this.container.style.display = 'flex';
+    }
+  }
+
+  hide() {
+    if (this.container) {
+      this.container.classList.add('hidden');
+      this.container.style.display = 'none';
+    }
+  }
+}
+
+class SettingsModalComponent extends UIComponent {
+  constructor(app) {
+    super('settings-modal');
+    this.app = app;
+    this.initBindings();
+  }
+
+  initBindings() {
+    const openBtn = document.getElementById('btn-open-settings');
+    const closeBtn = document.getElementById('btn-close-settings');
+    const closeBtnX = document.getElementById('btn-close-settings-x');
+
+    if (openBtn) openBtn.addEventListener('click', () => this.show());
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        this.hide();
+        if (this.app && this.app.logEvent) {
+          this.app.logEvent('Settings saved & applied.', 'info');
+        }
+      });
+    }
+    if (closeBtnX) closeBtnX.addEventListener('click', () => this.hide());
+
+    if (this.container) {
+      this.container.addEventListener('click', (e) => {
+        if (e.target === this.container) {
+          this.hide();
+        }
+      });
+    }
+  }
+}
+
+class GameFinishModalComponent extends UIComponent {
+  constructor(app) {
+    super('game-finish-modal');
+    this.app = app;
+    this.initBindings();
+  }
+
+  initBindings() {
+    const closeBtn = document.getElementById('btn-close-finish-x');
+    const playAgainBtn = document.getElementById('btn-play-again');
+
+    if (closeBtn) closeBtn.addEventListener('click', () => this.hide());
+    if (playAgainBtn) {
+      playAgainBtn.addEventListener('click', () => {
+        this.hide();
+        if (this.app && this.app.initNineBallRack) {
+          this.app.initNineBallRack();
+        }
+      });
+    }
+
+    if (this.container) {
+      this.container.addEventListener('click', (e) => {
+        if (e.target === this.container) {
+          this.hide();
+        }
+      });
+    }
+  }
+
+  showGameFinished(titleMessage, stats) {
+    const titleEl = document.getElementById('finish-title-text');
+    if (titleEl) titleEl.innerText = titleMessage;
+
+    const shotsEl = document.getElementById('finish-stat-shots');
+    if (shotsEl) shotsEl.innerText = stats.shots;
+
+    const potsEl = document.getElementById('finish-stat-pots');
+    if (potsEl) potsEl.innerText = stats.pots;
+
+    const accEl = document.getElementById('finish-stat-acc');
+    if (accEl) {
+      const acc = stats.shots > 0 ? Math.round((stats.pots / stats.shots) * 100) : 0;
+      accEl.innerText = `${acc}%`;
+    }
+
+    const foulsEl = document.getElementById('finish-stat-fouls');
+    if (foulsEl) foulsEl.innerText = stats.fouls;
+
+    this.show();
+  }
+}
+
 class CueForgeSimulation {
   constructor(canvas) {
     this.canvas = canvas;
@@ -139,21 +248,14 @@ class CueForgeSimulation {
     this.firstBallHit = null;
     this.railHitAfterContact = false;
     this.pocketedThisShot = [];
-    this.targetBallBeforeShot = 1;
-    this.consecutiveFouls = [0, 0];
-    this.activePlayer = 0;
-
-    this.pockets = [
-      new Vector2(BedX, BedY),                              // Top Left
-      new Vector2(BedX + BedWidth / 2, BedY - 6),            // Top Center
-      new Vector2(BedX + BedWidth, BedY),                   // Top Right
-      new Vector2(BedX, BedY + BedHeight),                   // Bottom Left
-      new Vector2(BedX + BedWidth / 2, BedY + BedHeight + 6), // Bottom Center
-      new Vector2(BedX + BedWidth, BedY + BedHeight),        // Bottom Right
-    ];
+    this.targetBallBeforeShot = null;
 
     this.stats = { shots: 0, pots: 0, fouls: 0 };
     this.eventLogs = [];
+
+    // Reusable UI Modal Components
+    this.settingsModal = new SettingsModalComponent(this);
+    this.gameFinishModal = new GameFinishModalComponent(this);
 
     this.initNineBallRack();
     this.bindEvents();
@@ -607,7 +709,7 @@ class CueForgeSimulation {
 
       if (this.pocketedThisShot.includes(9)) {
         this.logEvent('VICTORY! Legally pocketed the 9-Ball!', 'pocket');
-        alert('🎉 VICTORY! Legally pocketed the 9-Ball!');
+        this.gameFinishModal.showGameFinished('🏆 VICTORY! Legally Pocketed the 9-Ball!', this.stats);
       } else if (this.pocketedThisShot.length > 0) {
         this.logEvent(`Legal Shot: Pocketed ${this.pocketedThisShot.length} ball(s). Continue shooting.`, 'pocket');
       } else {
