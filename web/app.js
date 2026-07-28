@@ -533,7 +533,23 @@ class CueForgeSimulation {
   }
 
   stepPhysics(dt) {
-    let activeMovement = false;
+    const maxSubStepDt = 0.001; // 1 ms sub-step integration (1000 Hz) to eliminate tunneling at high strike power
+    let remainingDt = dt;
+
+    while (remainingDt > 0) {
+      const subDt = Math.min(remainingDt, maxSubStepDt);
+      this.internalSubStep(subDt);
+      remainingDt -= subDt;
+    }
+
+    const anyMoving = this.balls.some(b => b.isMoving());
+    if (!anyMoving && this.isSimulating) {
+      this.isSimulating = false;
+      this.evaluateShotRules();
+    }
+  }
+
+  internalSubStep(dt) {
     const eff = this.getEffectiveFriction();
     const g = Gravity;
     const mu_s = eff.mu_s;
@@ -595,6 +611,7 @@ class CueForgeSimulation {
             document.getElementById('stat-pots').innerText = this.stats.pots;
             this.logEvent(`Ball #${b.id} pocketed!`, 'pocket');
           }
+          break;
         }
       }
 
@@ -617,7 +634,6 @@ class CueForgeSimulation {
 
       const speed = b.vel.len();
       if (speed > 5) {
-        activeMovement = true;
         const decel = (b.state === 'Sliding' ? mu_s : mu_r) * g * ScalePX;
         const newSpeed = Math.max(0, speed - decel * dt);
 
@@ -632,11 +648,6 @@ class CueForgeSimulation {
         b.vel = new Vector2(0, 0);
         b.state = 'Stationary';
       }
-    }
-
-    if (!activeMovement && this.isSimulating) {
-      this.isSimulating = false;
-      this.evaluateShotRules();
     }
   }
 
