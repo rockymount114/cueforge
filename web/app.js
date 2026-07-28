@@ -1,6 +1,6 @@
 /**
  * CueForge Studio — Interactive Web UI Simulation Engine
- * Phase 1 Core Physics & Visual Renderer with Simonis 860 Cloth Specifications
+ * Phase 1 Core Physics, HD Aiming Visualizer, and Settings Manager
  */
 
 const CanvasWidth = 1000;
@@ -115,6 +115,10 @@ class CueForgeSimulation {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
+
+    this.aimCanvas = document.getElementById('aim-canvas');
+    this.aimCtx = this.aimCanvas ? this.aimCanvas.getContext('2d') : null;
+
     this.balls = [];
     this.aimAngle = 0; // Radians
     this.cuePower = 2.5; // m/s
@@ -181,6 +185,11 @@ class CueForgeSimulation {
     document.getElementById('cloth-weave').innerText = eff.weave;
     document.getElementById('cloth-mu-r').innerText = eff.mu_r.toFixed(3);
     document.getElementById('cloth-mu-s').innerText = eff.mu_s.toFixed(2);
+
+    const badge = document.getElementById('active-cloth-badge');
+    if (badge) {
+      badge.innerText = `${eff.name} (${eff.weave.split(' ')[0]})`;
+    }
   }
 
   getLowestRemainingBall() {
@@ -308,6 +317,22 @@ class CueForgeSimulation {
     window.addEventListener('mouseup', () => {
       this.isDraggingAim = false;
     });
+
+    // Settings Modal Triggers
+    const modal = document.getElementById('settings-modal');
+    const openBtn = document.getElementById('btn-open-settings');
+    const closeBtn = document.getElementById('btn-close-settings');
+    const closeBtnX = document.getElementById('btn-close-settings-x');
+
+    if (openBtn && modal) {
+      openBtn.addEventListener('click', () => modal.classList.remove('hidden'));
+    }
+    if (closeBtn && modal) {
+      closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+    }
+    if (closeBtnX && modal) {
+      closeBtnX.addEventListener('click', () => modal.classList.add('hidden'));
+    }
 
     // Cloth Selectors & Sliders
     const clothSelect = document.getElementById('cloth-preset-select');
@@ -480,9 +505,22 @@ class CueForgeSimulation {
     const target = this.balls.find(b => b.id === lowestId && b.active);
 
     if (cueBall && target) {
+      const pocket = this.pockets[2];
+      const targetLineDir = pocket.sub(target.pos).normalize();
+      const aimDir = new Vector2(Math.cos(this.aimAngle), Math.sin(this.aimAngle));
+
+      const dot = aimDir.dot(targetLineDir);
+      const angleRad = Math.acos(Math.max(-1.0, Math.min(1.0, dot)));
+      const angleDeg = (angleRad * 180 / Math.PI).toFixed(1);
+
       document.getElementById('ai-target-ball').innerText = `Ball #${lowestId}`;
       document.getElementById('ai-target-pocket').innerText = 'Corner Right';
-      document.getElementById('ai-cut-angle').innerText = `${((this.aimAngle * 180 / Math.PI) % 90).toFixed(1)}°`;
+      document.getElementById('ai-cut-angle').innerText = `${angleDeg}°`;
+
+      const cutBadge = document.getElementById('cut-angle-badge');
+      if (cutBadge) {
+        cutBadge.innerText = `${angleDeg}° Cut`;
+      }
     }
   }
 
@@ -619,7 +657,7 @@ class CueForgeSimulation {
 
       const left = BedX + BallRadiusPX;
       const right = BedX + BedWidth - BallRadiusPX;
-      const top = BedY + BallRadiusPX;
+      const top = BedY + BedHeight - BallRadiusPX;
       const bottom = BedY + BedHeight - BallRadiusPX;
 
       let hitRail = false;
@@ -657,6 +695,133 @@ class CueForgeSimulation {
     item.className = `log-item ${type}`;
     item.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
     container.prepend(item);
+  }
+
+  drawAimGraph() {
+    if (!this.aimCtx) return;
+    const ctx = this.aimCtx;
+    const w = this.aimCanvas.width;
+    const h = this.aimCanvas.height;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Dark Background
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, w, h);
+
+    // Subtle Grid
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < w; x += 20) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    }
+    for (let y = 0; y < h; y += 20) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+
+    const cueBall = this.balls.find(b => b.id === 0);
+    const lowestId = this.getLowestRemainingBall();
+    const target = this.balls.find(b => b.id === lowestId && b.active);
+
+    const r = 14; // Radius for HD diagram rendering
+    const cuePos = new Vector2(45, h / 2 + 10);
+    const ghostPos = new Vector2(160, h / 2 + 10);
+
+    const aimDir = new Vector2(Math.cos(this.aimAngle), Math.sin(this.aimAngle));
+    const aimNorm = new Vector2(-aimDir.y, aimDir.x);
+
+    // Compute Cut Angle representation
+    const pocket = this.pockets[2];
+    let cutAngleDeg = 24.5;
+    let targetPos = new Vector2(ghostPos.x + 2 * r, ghostPos.y);
+
+    if (cueBall && target) {
+      const pocketDir = pocket.sub(target.pos).normalize();
+      const dot = aimDir.dot(pocketDir);
+      const angleRad = Math.acos(Math.max(-1.0, Math.min(1.0, dot)));
+      cutAngleDeg = angleRad * 180 / Math.PI;
+
+      // Position target ball relative to ghost ball along pocket line direction
+      targetPos = ghostPos.add(new Vector2(Math.cos(angleRad) * 2 * r, -Math.sin(angleRad) * 2 * r));
+    }
+
+    // 1. Draw Line of Aim (Cue Ball -> Ghost Ball)
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(cuePos.x, cuePos.y);
+    ctx.lineTo(ghostPos.x, ghostPos.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 2. Draw Target Line (Ghost Ball / Target Ball -> Pocket Direction)
+    ctx.strokeStyle = '#10b981';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(targetPos.x, targetPos.y);
+    ctx.lineTo(targetPos.x + 50, targetPos.y - 20);
+    ctx.stroke();
+
+    // 3. Draw Cut Angle Arc & Degree Label
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(ghostPos.x, ghostPos.y, 28, 0, -cutAngleDeg * Math.PI / 180, true);
+    ctx.stroke();
+
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = 'bold 10px JetBrains Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${cutAngleDeg.toFixed(1)}°`, ghostPos.x + 38, ghostPos.y - 12);
+
+    // 4. Draw Cue Ball (White)
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(cuePos.x, cuePos.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#64748b';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 5. Draw Ghost Ball (Dashed Outline)
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.arc(ghostPos.x, ghostPos.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 6. Draw Target Object Ball (Colored with Ball ID)
+    const targetColor = BallColors[lowestId] || '#facc15';
+    ctx.fillStyle = targetColor;
+    ctx.beginPath();
+    ctx.arc(targetPos.x, targetPos.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(targetPos.x, targetPos.y, r * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#1e293b';
+    ctx.font = 'bold 9px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(lowestId.toString(), targetPos.x, targetPos.y + 1);
+
+    // 7. Impact Contact Point Dot
+    const contactPoint = ghostPos.add(targetPos.sub(ghostPos).normalize().mul(r));
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.arc(contactPoint.x, contactPoint.y, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
   }
 
   draw() {
@@ -793,6 +958,9 @@ class CueForgeSimulation {
         ctx.fillText(ball.id.toString(), ball.pos.x, ball.pos.y + 1);
       }
     }
+
+    // Render HD Aiming Diagram
+    this.drawAimGraph();
   }
 
   startLoop() {

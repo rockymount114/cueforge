@@ -17,13 +17,13 @@
         <div class="logo-icon">🎱</div>
         <div class="brand-text">
           <h1>CueForge Studio</h1>
-          <span class="badge">Simonis 860 Worsted Spec</span>
+          <span class="badge" id="active-cloth-badge">Simonis 860 Worsted Spec</span>
         </div>
       </div>
       <div class="nav-actions">
         <button id="btn-place-cue" class="btn btn-warning">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
-          Place Cue Ball (Ball in Hand)
+          Ball in Hand
         </button>
         <button id="btn-reset-rack" class="btn btn-secondary">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
@@ -31,7 +31,11 @@
         </button>
         <button id="btn-ai-hint" class="btn btn-primary">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-          AI Coach Shot
+          AI Coach
+        </button>
+        <button id="btn-open-settings" class="btn btn-settings">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Settings
         </button>
       </div>
     </header>
@@ -70,46 +74,19 @@
 
       <!-- Right Panel: Sidebar Inspector -->
       <aside class="sidebar">
-        <!-- Cloth & Environmental Settings Card -->
-        <div class="card cloth-card">
-          <h3>Table Cloth Specification</h3>
-          <div class="control-group">
-            <label for="cloth-preset-select">Cloth Preset:</label>
-            <select id="cloth-preset-select" class="form-select">
-              <option value="simonis_860" selected>Simonis 860 (Tournament Blue)</option>
-              <option value="simonis_760">Simonis 760 (Fast Blue)</option>
-              <option value="league_cloth">Standard League (Classic Green)</option>
-              <option value="old_cloth">Old Bar Table (Heavy Napped)</option>
-            </select>
+        <!-- High Definition Aiming & Cut Angle Visualizer Card -->
+        <div class="card aim-graph-card">
+          <div class="card-header">
+            <h3>Aiming & Cut Angle Target</h3>
+            <span class="badge badge-cut" id="cut-angle-badge">24.5° Cut</span>
           </div>
-          <div class="details-list" style="margin-top: 8px;">
-            <div class="detail-row">
-              <span>Material:</span>
-              <strong id="cloth-material">90% Wool / 10% Nylon</strong>
-            </div>
-            <div class="detail-row">
-              <span>Weave:</span>
-              <strong id="cloth-weave">Worsted (Napless)</strong>
-            </div>
-            <div class="detail-row">
-              <span>Rolling Friction (&mu;<sub>r</sub>):</span>
-              <strong id="cloth-mu-r">0.015</strong>
-            </div>
-            <div class="detail-row">
-              <span>Sliding Friction (&mu;<sub>s</sub>):</span>
-              <strong id="cloth-mu-s">0.20</strong>
-            </div>
+          <div class="aim-canvas-container">
+            <canvas id="aim-canvas" width="280" height="140"></canvas>
           </div>
-
-          <div class="env-sliders" style="margin-top: 10px;">
-            <div class="control-group">
-              <label for="humidity-slider">Humidity: <span id="humidity-val">45</span>% RH</label>
-              <input type="range" id="humidity-slider" min="20" max="80" step="1" value="45">
-            </div>
-            <div class="control-group">
-              <label for="temp-slider">Temperature: <span id="temp-val">22</span>°C</label>
-              <input type="range" id="temp-slider" min="15" max="32" step="1" value="22">
-            </div>
+          <div class="aim-legend">
+            <div class="legend-item"><span class="dot dot-cue"></span> Cue Ball</div>
+            <div class="legend-item"><span class="dot dot-ghost"></span> Ghost Ball</div>
+            <div class="legend-item"><span class="dot dot-target"></span> Target Ball</div>
           </div>
         </div>
 
@@ -138,7 +115,7 @@
             </div>
             <div class="detail-row">
               <span>Target Pocket:</span>
-              <strong id="ai-target-pocket">Corner Top-Right</strong>
+              <strong id="ai-target-pocket">Corner Right</strong>
             </div>
             <div class="detail-row">
               <span>Cut Angle:</span>
@@ -183,6 +160,62 @@
         </div>
       </aside>
     </main>
+  </div>
+
+  <!-- Settings Modal Dialog -->
+  <div id="settings-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Table Cloth & Environment Settings</h2>
+        <button id="btn-close-settings-x" class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="control-group">
+          <label for="cloth-preset-select">Table Cloth Specification Preset:</label>
+          <select id="cloth-preset-select" class="form-select">
+            <option value="simonis_860" selected>Simonis 860 (Tournament Blue)</option>
+            <option value="simonis_760">Simonis 760 (Fast Blue)</option>
+            <option value="league_cloth">Standard League (Classic Green)</option>
+            <option value="old_cloth">Old Bar Table (Heavy Napped)</option>
+          </select>
+        </div>
+
+        <div class="details-box" style="margin-top: 12px; padding: 12px; background: rgba(15, 23, 42, 0.6); border-radius: 8px;">
+          <div class="detail-row">
+            <span>Material:</span>
+            <strong id="cloth-material">90% Wool / 10% Nylon</strong>
+          </div>
+          <div class="detail-row" style="margin-top: 4px;">
+            <span>Weave Surface:</span>
+            <strong id="cloth-weave">Worsted (Napless)</strong>
+          </div>
+          <div class="detail-row" style="margin-top: 4px;">
+            <span>Rolling Friction (&mu;<sub>r</sub>):</span>
+            <strong id="cloth-mu-r">0.015</strong>
+          </div>
+          <div class="detail-row" style="margin-top: 4px;">
+            <span>Sliding Friction (&mu;<sub>s</sub>):</span>
+            <strong id="cloth-mu-s">0.20</strong>
+          </div>
+        </div>
+
+        <div class="env-sliders" style="margin-top: 16px;">
+          <div class="control-group">
+            <label for="humidity-slider">Ambient Relative Humidity: <span id="humidity-val">45</span>% RH</label>
+            <input type="range" id="humidity-slider" min="20" max="80" step="1" value="45">
+          </div>
+          <div class="control-group" style="margin-top: 12px;">
+            <label for="temp-slider">Ambient Temperature: <span id="temp-val">22</span>°C</label>
+            <input type="range" id="temp-slider" min="15" max="32" step="1" value="22">
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="btn-close-settings" class="btn btn-primary">Save & Apply Settings</button>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>
