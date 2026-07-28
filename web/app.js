@@ -726,19 +726,20 @@ class CueForgeSimulation {
   }
 
   drawAimGraph() {
-    if (!this.aimCtx) return;
+    if (!this.aimCanvas || !this.aimCtx) return;
+
     const ctx = this.aimCtx;
     const w = this.aimCanvas.width;
     const h = this.aimCanvas.height;
 
     ctx.clearRect(0, 0, w, h);
 
-    // Dark Background
+    // Dark Slate Canvas Background
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(0, 0, w, h);
 
-    // Subtle Grid
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    // Subtle Grid Lines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
     ctx.lineWidth = 1;
     for (let x = 0; x < w; x += 20) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
@@ -751,49 +752,43 @@ class CueForgeSimulation {
     const lowestId = this.getLowestRemainingBall();
     const target = this.balls.find(b => b.id === lowestId && b.active);
 
-    const r = 14; // Radius for HD diagram rendering
-    const cuePos = new Vector2(45, h / 2 + 10);
-    const ghostPos = new Vector2(160, h / 2 + 10);
-
-    const aimDir = new Vector2(Math.cos(this.aimAngle), Math.sin(this.aimAngle));
-    const aimNorm = new Vector2(-aimDir.y, aimDir.x);
-
-    // Compute Cut Angle & Pool Hit Fraction
     const pocket = this.pockets[2];
     let cutInfo = { angleDeg: 24.5, fractionLabel: '1/2 Ball' };
-    let targetPos = new Vector2(ghostPos.x + 2 * r, ghostPos.y);
 
     if (cueBall && target) {
       cutInfo = this.getCutAngleAndHitFraction(target.pos, pocket);
-      const angleRad = cutInfo.angleDeg * Math.PI / 180;
-      targetPos = ghostPos.add(new Vector2(Math.cos(angleRad) * 2 * r, -Math.sin(angleRad) * 2 * r));
     }
 
-    // 1. Draw Line of Aim (Cue Ball -> Ghost Ball)
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.moveTo(cuePos.x, cuePos.y);
-    ctx.lineTo(ghostPos.x, ghostPos.y);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    const R = 22; // Ball radius for clean diagram rendering
+    const objPos = new Vector2(w - 75, h / 2 + 6);
 
-    // 2. Draw Target Line (Ghost Ball / Target Ball -> Pocket Direction)
+    // Ghost Ball position along cut direction
+    const rad = cutInfo.angleDeg * Math.PI / 180;
+    const ghostPos = new Vector2(
+      objPos.x - 2 * R * Math.cos(rad * 0.4),
+      objPos.y + 2 * R * Math.sin(rad * 0.4)
+    );
+
+    // 1. Aim Line (Ghost Ball Center -> Object Ball Center -> Pocket)
     ctx.strokeStyle = '#10b981';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(targetPos.x, targetPos.y);
-    ctx.lineTo(targetPos.x + 50, targetPos.y - 20);
+    ctx.moveTo(ghostPos.x - 30, ghostPos.y - (ghostPos.y - objPos.y) * 0.5);
+    ctx.lineTo(objPos.x + 35, objPos.y + (objPos.y - ghostPos.y) * 0.5);
     ctx.stroke();
 
-    // 3. Fixed Fractional-Hit Reference Scale (0°, 15°, 30°, 45°, 60°)
+    ctx.fillStyle = '#34d399';
+    ctx.font = 'bold 9px Inter, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('Aim Line →', Math.max(10, ghostPos.x - 45), ghostPos.y - 14);
+
+    // 2. Static Fractional Hit Reference Lines (Full, 3/4, 1/2, 1/4, 1/8)
     const refFractions = [
-      { angle: 0, label: 'Full' },
-      { angle: 15, label: '3/4' },
-      { angle: 30, label: '1/2' },
-      { angle: 45, label: '1/4' },
-      { angle: 60, label: '1/8' },
+      { offsetFactor: 0.0, label: 'Full' },
+      { offsetFactor: 0.5, label: '3/4' },
+      { offsetFactor: 1.0, label: '1/2' },
+      { offsetFactor: 1.5, label: '1/4' },
+      { offsetFactor: 1.75, label: '1/8' },
     ];
 
     ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
@@ -801,82 +796,35 @@ class CueForgeSimulation {
     ctx.setLineDash([2, 2]);
 
     for (const ref of refFractions) {
-      const rad = -ref.angle * Math.PI / 180;
-      const innerX = ghostPos.x + Math.cos(rad) * 16;
-      const innerY = ghostPos.y + Math.sin(rad) * 16;
-      const outerX = ghostPos.x + Math.cos(rad) * 34;
-      const outerY = ghostPos.y + Math.sin(rad) * 34;
-
+      const refX = objPos.x - 2 * R + ref.offsetFactor * R;
       ctx.beginPath();
-      ctx.moveTo(innerX, innerY);
-      ctx.lineTo(outerX, outerY);
+      ctx.moveTo(refX, 22);
+      ctx.lineTo(refX, h - 16);
       ctx.stroke();
 
       ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
-      ctx.font = '7px JetBrains Mono, monospace';
+      ctx.font = '8px JetBrains Mono, monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(ref.label, ghostPos.x + Math.cos(rad) * 42, ghostPos.y + Math.sin(rad) * 42 + 2);
+      ctx.fillText(ref.label, refX, h - 5);
     }
     ctx.setLineDash([]);
 
-    // Player's Currently Selected Cut Angle Arc
-    ctx.strokeStyle = '#f59e0b';
-    ctx.lineWidth = 2;
+    // 3. Ghost Ball (Translucent Outlined Circle)
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.15)';
     ctx.beginPath();
-    ctx.arc(ghostPos.x, ghostPos.y, 26, 0, -cutInfo.angleDeg * Math.PI / 180, true);
-    ctx.stroke();
-
-    ctx.fillStyle = '#fbbf24';
-    ctx.font = 'bold 10px JetBrains Mono, monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${cutInfo.angleDeg.toFixed(1)}° • ${cutInfo.fractionLabel}`, ghostPos.x + 35, ghostPos.y - 14);
-
-    // 4. Draw Cue Ball (White) & Cue Tip Contact Point
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(cuePos.x, cuePos.y, r, 0, Math.PI * 2);
+    ctx.arc(ghostPos.x, ghostPos.y, R, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#64748b';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Cue Tip Contact Offset Marker & Vertical Dotted Line Indicator
-    const tipX = cuePos.x + this.spinOffsetX * (r * 0.70);
-    const tipY = cuePos.y - this.spinOffsetY * (r * 0.70);
-
-    // Vertical Dotted Line through Cue Tip Contact Point
-    ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([2, 3]);
-    ctx.beginPath();
-    ctx.moveTo(tipX, cuePos.y - r - 6);
-    ctx.lineTo(tipX, cuePos.y + r + 6);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Cue Tip Crosshair Dot
-    ctx.fillStyle = '#ef4444';
-    ctx.beginPath();
-    ctx.arc(tipX, tipY, 3.0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // 5. Draw Ghost Ball (Dashed Outline)
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 2;
     ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.arc(ghostPos.x, ghostPos.y, r, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // 6. Draw Target Object Ball (Colored with Ball ID)
+    // 4. Target Object Ball (Solid, Colored with Ball ID)
     const targetColor = BallColors[lowestId] || '#facc15';
     ctx.fillStyle = targetColor;
     ctx.beginPath();
-    ctx.arc(targetPos.x, targetPos.y, r, 0, Math.PI * 2);
+    ctx.arc(objPos.x, objPos.y, R, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = '#0f172a';
     ctx.lineWidth = 1.5;
@@ -884,35 +832,49 @@ class CueForgeSimulation {
 
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.arc(targetPos.x, targetPos.y, r * 0.45, 0, Math.PI * 2);
+    ctx.arc(objPos.x, objPos.y, R * 0.42, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 9px Inter, sans-serif';
+    ctx.font = 'bold 10px Inter, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(lowestId.toString(), targetPos.x, targetPos.y + 1);
+    ctx.fillText(lowestId.toString(), objPos.x, objPos.y + 1);
 
-    // 7. Impact Contact Point & Vertical Dotted Line Indicator on Target
-    const contactPoint = ghostPos.add(targetPos.sub(ghostPos).normalize().mul(r));
+    // 5. Live Selected Contact Point (Bold Vertical Dotted Line & Tag)
+    const contactX = objPos.x - R * Math.cos(rad * 0.4);
+    const contactY = objPos.y + R * Math.sin(rad * 0.4);
 
-    // Vertical Dotted Line Indicator passing through impact contact point across target view
-    ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(239, 68, 68, 0.95)';
+    ctx.lineWidth = 2.0;
     ctx.setLineDash([3, 3]);
     ctx.beginPath();
-    ctx.moveTo(contactPoint.x, 12);
-    ctx.lineTo(contactPoint.x, h - 12);
+    ctx.moveTo(contactX, 14);
+    ctx.lineTo(contactX, h - 18);
     ctx.stroke();
     ctx.setLineDash([]);
 
     // Impact Contact Point Accent Dot
     ctx.fillStyle = '#ef4444';
     ctx.beginPath();
-    ctx.arc(contactPoint.x, contactPoint.y, 4.0, 0, Math.PI * 2);
+    ctx.arc(contactX, contactY, 4.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.5;
     ctx.stroke();
+
+    // "contact point" Pointer Label
+    ctx.fillStyle = '#ef4444';
+    ctx.font = 'bold 8px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('contact point ▼', contactX, 4);
+
+    // Top Header Readout
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = 'bold 11px JetBrains Mono, monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`${cutInfo.angleDeg.toFixed(1)}° • ${cutInfo.fractionLabel}`, 10, 6);
   }
 
   draw() {
