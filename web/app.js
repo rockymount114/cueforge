@@ -518,11 +518,11 @@ class CueForgeSimulation {
     const cutAngleDeg = Math.max(0, Math.min(90, deg));
 
     let fractionLabel = 'Full Ball (1/1)';
-    if (cutAngleDeg < 5) fractionLabel = 'Full Ball (1/1)';
-    else if (cutAngleDeg < 22) fractionLabel = '3/4 Ball';
-    else if (cutAngleDeg < 39) fractionLabel = '1/2 Ball';
-    else if (cutAngleDeg < 55) fractionLabel = '1/4 Ball';
-    else if (cutAngleDeg < 72) fractionLabel = '1/8 Ball';
+    if (cutAngleDeg < 7.5) fractionLabel = 'Full Ball (1/1)';
+    else if (cutAngleDeg < 22.5) fractionLabel = '3/4 Ball';
+    else if (cutAngleDeg < 37.5) fractionLabel = '1/2 Ball';
+    else if (cutAngleDeg < 52.5) fractionLabel = '1/4 Ball';
+    else if (cutAngleDeg < 67.5) fractionLabel = '1/8 Ball';
     else fractionLabel = 'Thin Glance';
 
     return {
@@ -787,17 +787,49 @@ class CueForgeSimulation {
     ctx.lineTo(targetPos.x + 50, targetPos.y - 20);
     ctx.stroke();
 
-    // 3. Draw Cut Angle Arc & Fraction Label
+    // 3. Fixed Fractional-Hit Reference Scale (0°, 15°, 30°, 45°, 60°)
+    const refFractions = [
+      { angle: 0, label: 'Full' },
+      { angle: 15, label: '3/4' },
+      { angle: 30, label: '1/2' },
+      { angle: 45, label: '1/4' },
+      { angle: 60, label: '1/8' },
+    ];
+
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+
+    for (const ref of refFractions) {
+      const rad = -ref.angle * Math.PI / 180;
+      const innerX = ghostPos.x + Math.cos(rad) * 16;
+      const innerY = ghostPos.y + Math.sin(rad) * 16;
+      const outerX = ghostPos.x + Math.cos(rad) * 34;
+      const outerY = ghostPos.y + Math.sin(rad) * 34;
+
+      ctx.beginPath();
+      ctx.moveTo(innerX, innerY);
+      ctx.lineTo(outerX, outerY);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
+      ctx.font = '7px JetBrains Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(ref.label, ghostPos.x + Math.cos(rad) * 42, ghostPos.y + Math.sin(rad) * 42 + 2);
+    }
+    ctx.setLineDash([]);
+
+    // Player's Currently Selected Cut Angle Arc
     ctx.strokeStyle = '#f59e0b';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(ghostPos.x, ghostPos.y, 28, 0, -cutInfo.angleDeg * Math.PI / 180, true);
+    ctx.arc(ghostPos.x, ghostPos.y, 26, 0, -cutInfo.angleDeg * Math.PI / 180, true);
     ctx.stroke();
 
     ctx.fillStyle = '#fbbf24';
     ctx.font = 'bold 10px JetBrains Mono, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(`${cutInfo.angleDeg.toFixed(1)}° (${cutInfo.fractionLabel})`, ghostPos.x + 35, ghostPos.y - 14);
+    ctx.fillText(`${cutInfo.angleDeg.toFixed(1)}° • ${cutInfo.fractionLabel}`, ghostPos.x + 35, ghostPos.y - 14);
 
     // 4. Draw Cue Ball (White) & Cue Tip Contact Point
     ctx.fillStyle = '#ffffff';

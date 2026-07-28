@@ -24,15 +24,15 @@ impl RecommendedShot {
         let deg = (self.cut_angle_rad * 180.0 / std::f64::consts::PI) % 180.0;
         let cut_deg = if deg > 90.0 { 180.0 - deg } else { deg };
 
-        if cut_deg < 5.0 {
+        if cut_deg < 7.5 {
             "Full Ball (1/1)"
-        } else if cut_deg < 22.0 {
+        } else if cut_deg < 22.5 {
             "3/4 Ball Hit"
-        } else if cut_deg < 39.0 {
+        } else if cut_deg < 37.5 {
             "1/2 Ball Hit"
-        } else if cut_deg < 55.0 {
+        } else if cut_deg < 52.5 {
             "1/4 Ball Hit"
-        } else if cut_deg < 72.0 {
+        } else if cut_deg < 67.5 {
             "1/8 Ball Hit"
         } else {
             "Thin Glance"
