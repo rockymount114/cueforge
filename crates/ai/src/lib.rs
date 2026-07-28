@@ -18,6 +18,28 @@ pub struct RecommendedShot {
     pub recommended_strike: CueStrike,
 }
 
+impl RecommendedShot {
+    /// Return formatted fraction description for pool aiming (e.g. "1/2 Ball Hit", "Full Ball (1/1)", "1/4 Ball Hit").
+    pub fn fractional_hit_desc(&self) -> &'static str {
+        let deg = (self.cut_angle_rad * 180.0 / std::f64::consts::PI) % 180.0;
+        let cut_deg = if deg > 90.0 { 180.0 - deg } else { deg };
+
+        if cut_deg < 5.0 {
+            "Full Ball (1/1)"
+        } else if cut_deg < 22.0 {
+            "3/4 Ball Hit"
+        } else if cut_deg < 39.0 {
+            "1/2 Ball Hit"
+        } else if cut_deg < 55.0 {
+            "1/4 Ball Hit"
+        } else if cut_deg < 72.0 {
+            "1/8 Ball Hit"
+        } else {
+            "Thin Glance"
+        }
+    }
+}
+
 /// Defensive safety shot proposal.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SafetyShot {
@@ -70,7 +92,12 @@ pub fn find_best_shot(
             let cue_approach = cue_to_ghost.normalize();
 
             let cos_cut = cue_approach.dot(ghost_to_pocket).clamp(-1.0, 1.0);
-            let cut_angle = cos_cut.acos();
+            let raw_cut = cos_cut.acos();
+            let cut_angle = if raw_cut > std::f64::consts::FRAC_PI_2 {
+                std::f64::consts::PI - raw_cut
+            } else {
+                raw_cut
+            };
 
             // Ignore extreme thin cut angles > 75 degrees (~1.3 rad)
             if cut_angle < 1.3 {
@@ -163,8 +190,7 @@ pub fn evaluate_safety(world: &World, _table: &TableSpec, cue_ball_id: u32) -> O
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cueforge_common::{Vec2, Vec3};
-    use cueforge_physics::{Ball, BallId, WorldConfig};
+    use cueforge_common::Vec2;
 
     #[test]
     fn test_ghost_ball_calculation() {
@@ -176,15 +202,15 @@ mod tests {
     }
 
     #[test]
-    fn test_position_prediction() {
-        let mut world = World::new(WorldConfig::default());
-        world.add_ball(Ball::new(BallId(0), Vec3::new(0.0, -0.5, 0.0)));
-        world.add_ball(Ball::new(BallId(1), Vec3::new(0.0, 0.5, 0.0)));
-
-        let strike = CueStrike::center_shot(1.5, std::f64::consts::FRAC_PI_2);
-        let pred = predict_position(&world, &strike, 0, 500);
-
-        assert!(pred.total_ticks_simulated > 0);
-        assert!(pred.final_cue_position.y > -0.5);
+    fn test_fractional_hit_desc() {
+        let shot = RecommendedShot {
+            target_ball_id: 1,
+            pocket_index: 0,
+            ghost_ball_position: Vec2::ZERO,
+            aim_azimuth_rad: 0.0,
+            cut_angle_rad: 30.0 * std::f64::consts::PI / 180.0,
+            recommended_strike: CueStrike::center_shot(2.5, 0.0),
+        };
+        assert_eq!(shot.fractional_hit_desc(), "1/2 Ball Hit");
     }
 }

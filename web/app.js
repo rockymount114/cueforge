@@ -499,6 +499,33 @@ class CueForgeSimulation {
     this.updateAIDetails();
   }
 
+  getCutAngleAndHitFraction(targetPos, pocketPos) {
+    const pocketDir = pocketPos.sub(targetPos).normalize();
+    const aimDir = new Vector2(Math.cos(this.aimAngle), Math.sin(this.aimAngle));
+
+    const dot = aimDir.dot(pocketDir);
+    const rawAngleRad = Math.acos(Math.max(-1.0, Math.min(1.0, dot)));
+    let deg = (rawAngleRad * 180 / Math.PI) % 180;
+    if (deg > 90) {
+      deg = 180 - deg;
+    }
+    const cutAngleDeg = Math.max(0, Math.min(90, deg));
+
+    let fractionLabel = 'Full Ball (1/1)';
+    if (cutAngleDeg < 5) fractionLabel = 'Full Ball (1/1)';
+    else if (cutAngleDeg < 22) fractionLabel = '3/4 Ball';
+    else if (cutAngleDeg < 39) fractionLabel = '1/2 Ball';
+    else if (cutAngleDeg < 55) fractionLabel = '1/4 Ball';
+    else if (cutAngleDeg < 72) fractionLabel = '1/8 Ball';
+    else fractionLabel = 'Thin Glance';
+
+    return {
+      angleDeg: cutAngleDeg,
+      fractionLabel: fractionLabel,
+      displayString: `${cutAngleDeg.toFixed(1)}° (${fractionLabel})`,
+    };
+  }
+
   updateAIDetails() {
     const cueBall = this.balls.find(b => b.id === 0);
     const lowestId = this.getLowestRemainingBall();
@@ -506,20 +533,15 @@ class CueForgeSimulation {
 
     if (cueBall && target) {
       const pocket = this.pockets[2];
-      const targetLineDir = pocket.sub(target.pos).normalize();
-      const aimDir = new Vector2(Math.cos(this.aimAngle), Math.sin(this.aimAngle));
-
-      const dot = aimDir.dot(targetLineDir);
-      const angleRad = Math.acos(Math.max(-1.0, Math.min(1.0, dot)));
-      const angleDeg = (angleRad * 180 / Math.PI).toFixed(1);
+      const cutInfo = this.getCutAngleAndHitFraction(target.pos, pocket);
 
       document.getElementById('ai-target-ball').innerText = `Ball #${lowestId}`;
       document.getElementById('ai-target-pocket').innerText = 'Corner Right';
-      document.getElementById('ai-cut-angle').innerText = `${angleDeg}°`;
+      document.getElementById('ai-cut-angle').innerText = cutInfo.displayString;
 
       const cutBadge = document.getElementById('cut-angle-badge');
       if (cutBadge) {
-        cutBadge.innerText = `${angleDeg}° Cut`;
+        cutBadge.innerText = `${cutInfo.angleDeg.toFixed(1)}° • ${cutInfo.fractionLabel}`;
       }
     }
   }
@@ -730,18 +752,14 @@ class CueForgeSimulation {
     const aimDir = new Vector2(Math.cos(this.aimAngle), Math.sin(this.aimAngle));
     const aimNorm = new Vector2(-aimDir.y, aimDir.x);
 
-    // Compute Cut Angle representation
+    // Compute Cut Angle & Pool Hit Fraction
     const pocket = this.pockets[2];
-    let cutAngleDeg = 24.5;
+    let cutInfo = { angleDeg: 24.5, fractionLabel: '1/2 Ball' };
     let targetPos = new Vector2(ghostPos.x + 2 * r, ghostPos.y);
 
     if (cueBall && target) {
-      const pocketDir = pocket.sub(target.pos).normalize();
-      const dot = aimDir.dot(pocketDir);
-      const angleRad = Math.acos(Math.max(-1.0, Math.min(1.0, dot)));
-      cutAngleDeg = angleRad * 180 / Math.PI;
-
-      // Position target ball relative to ghost ball along pocket line direction
+      cutInfo = this.getCutAngleAndHitFraction(target.pos, pocket);
+      const angleRad = cutInfo.angleDeg * Math.PI / 180;
       targetPos = ghostPos.add(new Vector2(Math.cos(angleRad) * 2 * r, -Math.sin(angleRad) * 2 * r));
     }
 
@@ -763,17 +781,17 @@ class CueForgeSimulation {
     ctx.lineTo(targetPos.x + 50, targetPos.y - 20);
     ctx.stroke();
 
-    // 3. Draw Cut Angle Arc & Degree Label
+    // 3. Draw Cut Angle Arc & Fraction Label
     ctx.strokeStyle = '#f59e0b';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(ghostPos.x, ghostPos.y, 28, 0, -cutAngleDeg * Math.PI / 180, true);
+    ctx.arc(ghostPos.x, ghostPos.y, 28, 0, -cutInfo.angleDeg * Math.PI / 180, true);
     ctx.stroke();
 
     ctx.fillStyle = '#fbbf24';
     ctx.font = 'bold 10px JetBrains Mono, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(`${cutAngleDeg.toFixed(1)}°`, ghostPos.x + 38, ghostPos.y - 12);
+    ctx.fillText(`${cutInfo.angleDeg.toFixed(1)}° (${cutInfo.fractionLabel})`, ghostPos.x + 35, ghostPos.y - 14);
 
     // 4. Draw Cue Ball (White)
     ctx.fillStyle = '#ffffff';
