@@ -657,7 +657,7 @@ class CueForgeSimulation {
 
       const left = BedX + BallRadiusPX;
       const right = BedX + BedWidth - BallRadiusPX;
-      const top = BedY + BedHeight - BallRadiusPX;
+      const top = BedY + BallRadiusPX;
       const bottom = BedY + BedHeight - BallRadiusPX;
 
       let hitRail = false;
