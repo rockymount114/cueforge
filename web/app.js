@@ -799,13 +799,36 @@ class CueForgeSimulation {
     ctx.textAlign = 'center';
     ctx.fillText(`${cutInfo.angleDeg.toFixed(1)}° (${cutInfo.fractionLabel})`, ghostPos.x + 35, ghostPos.y - 14);
 
-    // 4. Draw Cue Ball (White)
+    // 4. Draw Cue Ball (White) & Cue Tip Contact Point
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.arc(cuePos.x, cuePos.y, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = '#64748b';
     ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Cue Tip Contact Offset Marker & Vertical Dotted Line Indicator
+    const tipX = cuePos.x + this.spinOffsetX * (r * 0.70);
+    const tipY = cuePos.y - this.spinOffsetY * (r * 0.70);
+
+    // Vertical Dotted Line through Cue Tip Contact Point
+    ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath();
+    ctx.moveTo(tipX, cuePos.y - r - 6);
+    ctx.lineTo(tipX, cuePos.y + r + 6);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Cue Tip Crosshair Dot
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.arc(tipX, tipY, 3.0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
     ctx.stroke();
 
     // 5. Draw Ghost Ball (Dashed Outline)
@@ -837,10 +860,10 @@ class CueForgeSimulation {
     ctx.textBaseline = 'middle';
     ctx.fillText(lowestId.toString(), targetPos.x, targetPos.y + 1);
 
-    // 7. Impact Contact Point & Vertical Dotted Line Indicator
+    // 7. Impact Contact Point & Vertical Dotted Line Indicator on Target
     const contactPoint = ghostPos.add(targetPos.sub(ghostPos).normalize().mul(r));
 
-    // Vertical Dotted Line Indicator passing through impact contact point
+    // Vertical Dotted Line Indicator passing through impact contact point across target view
     ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
     ctx.lineWidth = 1.5;
     ctx.setLineDash([3, 3]);
