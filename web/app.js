@@ -407,6 +407,9 @@ class CueForgeSimulation {
 
         document.getElementById('spin-x-val').innerText = x.toFixed(2);
         document.getElementById('spin-y-val').innerText = y.toFixed(2);
+
+        this.updateAIDetails();
+        this.drawAimGraph();
       };
 
       updateSpin(e);
@@ -426,6 +429,9 @@ class CueForgeSimulation {
       spinCrosshair.style.top = '50%';
       document.getElementById('spin-x-val').innerText = '0.00';
       document.getElementById('spin-y-val').innerText = '0.00';
+
+      this.updateAIDetails();
+      this.drawAimGraph();
     });
   }
 
@@ -831,14 +837,26 @@ class CueForgeSimulation {
     ctx.textBaseline = 'middle';
     ctx.fillText(lowestId.toString(), targetPos.x, targetPos.y + 1);
 
-    // 7. Impact Contact Point Dot
+    // 7. Impact Contact Point & Vertical Dotted Line Indicator
     const contactPoint = ghostPos.add(targetPos.sub(ghostPos).normalize().mul(r));
+
+    // Vertical Dotted Line Indicator passing through impact contact point
+    ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(contactPoint.x, 12);
+    ctx.lineTo(contactPoint.x, h - 12);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Impact Contact Point Accent Dot
     ctx.fillStyle = '#ef4444';
     ctx.beginPath();
-    ctx.arc(contactPoint.x, contactPoint.y, 3.5, 0, Math.PI * 2);
+    ctx.arc(contactPoint.x, contactPoint.y, 4.0, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.5;
     ctx.stroke();
   }
 
