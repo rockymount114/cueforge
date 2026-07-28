@@ -324,14 +324,33 @@ class CueForgeSimulation {
     const closeBtn = document.getElementById('btn-close-settings');
     const closeBtnX = document.getElementById('btn-close-settings-x');
 
-    if (openBtn && modal) {
-      openBtn.addEventListener('click', () => modal.classList.remove('hidden'));
-    }
-    if (closeBtn && modal) {
-      closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
-    }
-    if (closeBtnX && modal) {
-      closeBtnX.addEventListener('click', () => modal.classList.add('hidden'));
+    const hideModal = () => {
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+      }
+    };
+
+    const showModal = () => {
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
+      }
+    };
+
+    if (openBtn) openBtn.addEventListener('click', showModal);
+    if (closeBtn) closeBtn.addEventListener('click', () => {
+      hideModal();
+      this.logEvent('Settings saved & applied.', 'info');
+    });
+    if (closeBtnX) closeBtnX.addEventListener('click', hideModal);
+
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          hideModal();
+        }
+      });
     }
 
     // Cloth Selectors & Sliders
