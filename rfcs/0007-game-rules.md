@@ -7,61 +7,54 @@
 
 ## Summary
 
-This RFC specifies the game state machines, foul evaluation logic, turn switching, scoring systems, and rack resets for official cue sport variants: **8-Ball**, **9-Ball**, and **Straight Pool (14.1 Continuous)**.
+This RFC specifies the game state machines, foul evaluation logic, turn switching, scoring systems, and rack resets for official cue sport variants: **8-Ball**, **WPA Official 9-Ball**, and **Straight Pool (14.1 Continuous)**, aligned with WPA (World Pool-Billiard Association) standards.
 
 ## Motivation
 
-While `crates/rules` currently provides basic shot event filtering (scratch detection, first ball struck), formal competitive gameplay requires deterministic game state management:
-- Group assignment (Solids vs. Stripes in 8-Ball).
-- Target ball ordering (lowest-numbered ball target in 9-Ball).
-- Rack reset logic (continuous 14-ball rack resets in 14.1).
-- Consecutive foul counters (e.g. 3-foul loss in 9-Ball).
+While `crates/rules` initially provided basic event filtering, formal WPA 9-ball tournament rules require strict enforcement of:
+- **Rotation Rule**: Cue ball must hit lowest-numbered active object ball first (`FoulType::WrongBallFirst`).
+- **Rail Contact Requirement**: After initial contact, at least one ball must pocket or contact a rail (`FoulType::NoRailContact`).
+- **Push Out Mechanics**: Available exclusively immediately after a legal break shot (`announce_push_out` and pass-back options).
+- **WPA 9-Ball Re-spotting**: 9-ball is re-spotted on foot spot if pocketed on break (WPA rule) or pocketed during a foul.
+- **Three-Foul Loss**: 3 consecutive fouls without a legal shot in between results in loss of frame/game.
 
 ## Guide-level explanation
 
 The `RuleEngine` maintains `GameState` across consecutive shots:
 - `EightBallState`: Open table, assigned player groups (`Solids` or `Stripes`), 8-ball call-shot target.
-- `NineBallState`: Lowest-numbered active ball requirement, push-out state, 3-foul penalty counter per player.
-- `StraightPoolState`: Cumulative call-shot point tracker, 14-ball rack reset state (leaving cue ball and 15th object ball in position).
+- `NineBallState`: WPA rotation enforcement (`lowest_active_ball`), push-out mechanics (`push_out_available`, `push_out_active`), 9-ball re-spotting on break/foul, and 3-foul penalty counter.
+- `StraightPoolState`: Cumulative call-shot point tracker, 14-ball rack reset state.
 
-Call-shot declarations and physical shot event streams (`ShotResult`) are evaluated at the end of each simulation turn to produce `TurnOutcome`:
+Physical shot event streams (`ShotResult`) are evaluated at the end of each simulation turn to produce `TurnOutcome`:
 - `KeepTurn`: Active player potted a legal ball without fouling.
-- `SwitchTurn`: Active player missed or committed a foul (giving opponent ball-in-hand or table position).
-- `GameOver { winner }`: Game-ending condition reached.
+- `SwitchTurn { ball_in_hand }`: Active player missed or committed a foul (giving opponent ball-in-hand or table position).
+- `PushOutOffered`: Push out shot completed; opponent has option to shoot from position or pass turn back.
+- `GameOver { winner }`: Game-ending condition reached (legal 9-ball pot, 3-foul loss, 8-ball pot).
 
 ## Reference-level explanation
 
-Data structures added to `crates/rules`:
+Data structures in `crates/rules`:
 
 ```rust
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BallGroup {
-    Solids,
-    Stripes,
-    EightBall,
+pub enum FoulType {
+    Scratch,
+    NoContact,
+    WrongBallFirst,
+    NoRailContact,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct EightBallGameState {
-    pub player_groups: [Option<BallGroup>; 2],
-    pub table_open: bool,
-    pub winner: Option<usize>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct NineBallGameState {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NineBallState {
     pub lowest_active_ball: u32,
     pub consecutive_fouls: [u8; 2],
-    pub push_out_allowed: bool,
+    pub active_player: usize,
     pub winner: Option<usize>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct StraightPoolGameState {
-    pub scores: [i32; 2],
-    pub target_score: i32,
-    pub consecutive_fouls: [u8; 2],
-    pub winner: Option<usize>,
+    pub is_break_shot: bool,
+    pub push_out_available: bool,
+    pub push_out_active: bool,
+    pub wpa_spot_9ball_on_break: bool,
+    pub respawn_9ball_needed: bool,
 }
 ```
 
@@ -69,15 +62,15 @@ State transitions are evaluated deterministically from `ShotResult` after `World
 
 ## Drawbacks
 
-Additional game state bookkeeping adds minor complexity to simulation state snapshots, but keeps game logic decoupled from renderer/UI crates.
+Adds push-out state handling, but ensures 100% compliance with WPA rules.
 
 ## Alternatives considered
 
-- *Embedding rule checking in `crates/ui`*: Rejected because UI should only render simulation/game state, adhering to the standard crate dependency hierarchy.
+- *Amateur league immediate win on break*: Supported as an optional toggle (`wpa_spot_9ball_on_break: false`).
 
 ## Unresolved questions
 
-- Snooker variant rules (15 red balls, color sequences) to be covered in a follow-up RFC (RFC 0008).
+- Snooker variant rules (15 red balls, color sequences) to be covered in RFC 0008.
 
 ## Documentation impact
 

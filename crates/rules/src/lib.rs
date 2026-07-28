@@ -1,6 +1,6 @@
 //! `cueforge-rules`
 //!
-//! Game variant rules: 8-ball, 9-ball, straight pool, foul evaluation, scoring state machine.
+//! Game variant rules: 8-ball, 9-ball (WPA spec), straight pool, foul evaluation, scoring state machine.
 
 use cueforge_physics::{BallId, Event};
 
@@ -31,16 +31,16 @@ impl BallGroup {
     }
 }
 
-/// Foul types in cue sports.
+/// Foul types in cue sports based on WPA standards.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FoulType {
     /// Cue ball scratch (pocketed).
     Scratch,
     /// No ball was hit by cue ball.
     NoContact,
-    /// Cue ball hit illegal ball first.
+    /// Cue ball hit illegal ball first (rotation violation).
     WrongBallFirst,
-    /// No rail driven after contact.
+    /// No rail driven after initial contact and no ball pocketed.
     NoRailContact,
 }
 
@@ -60,6 +60,7 @@ pub struct ShotResult {
 pub enum TurnOutcome {
     KeepTurn,
     SwitchTurn { ball_in_hand: bool },
+    PushOutOffered,
     GameOver { winner: usize },
 }
 
@@ -83,13 +84,18 @@ impl Default for EightBallState {
     }
 }
 
-/// State container for a 9-Ball match.
+/// Comprehensive WPA 9-Ball state machine based on `test_result.md`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NineBallState {
     pub lowest_active_ball: u32,
     pub consecutive_fouls: [u8; 2],
     pub active_player: usize,
     pub winner: Option<usize>,
+    pub is_break_shot: bool,
+    pub push_out_available: bool,
+    pub push_out_active: bool,
+    pub wpa_spot_9ball_on_break: bool,
+    pub respawn_9ball_needed: bool,
 }
 
 impl Default for NineBallState {
@@ -99,7 +105,29 @@ impl Default for NineBallState {
             consecutive_fouls: [0, 0],
             active_player: 0,
             winner: None,
+            is_break_shot: true,
+            push_out_available: false,
+            push_out_active: false,
+            wpa_spot_9ball_on_break: true,
+            respawn_9ball_needed: false,
         }
+    }
+}
+
+impl NineBallState {
+    /// Announce a push-out shot immediately after a legal break.
+    pub fn announce_push_out(&mut self) -> Result<(), &'static str> {
+        if !self.push_out_available {
+            return Err("Push out is only available immediately after a legal break shot.");
+        }
+        self.push_out_active = true;
+        self.push_out_available = false;
+        Ok(())
+    }
+
+    /// Opponent option to pass turn back to push-out shooter.
+    pub fn pass_push_out_shot_back(&mut self) {
+        self.active_player = 1 - self.active_player;
     }
 }
 
@@ -189,6 +217,9 @@ impl RuleEngine {
 
         if first_ball_struck.is_none() {
             fouls.push(FoulType::NoContact);
+        } else if pocketed_balls.is_empty() && !rail_hit_after_contact {
+            // WPA Rule Section 8 / 19: After contact, if no ball is pocketed, a rail must be hit.
+            fouls.push(FoulType::NoRailContact);
         }
 
         let is_valid = fouls.is_empty();
@@ -257,7 +288,7 @@ impl RuleEngine {
         }
     }
 
-    /// Process turn progression for 9-Ball.
+    /// Process turn progression for 9-Ball per WPA Official Rules (test_result.md).
     pub fn process_nine_ball(&mut self, shot: &ShotResult) -> TurnOutcome {
         if let Some(w) = self.nine_ball_state.winner {
             return TurnOutcome::GameOver { winner: w };
@@ -265,23 +296,75 @@ impl RuleEngine {
 
         let active = self.nine_ball_state.active_player;
         let opponent = 1 - active;
+        self.nine_ball_state.respawn_9ball_needed = false;
 
-        let mut foul_committed = !shot.is_valid;
-        if let Some(first) = shot.first_ball_struck {
-            if first.0 != self.nine_ball_state.lowest_active_ball {
-                foul_committed = true;
-            }
-        } else {
-            foul_committed = true;
+        // Push Out Shot Evaluation
+        if self.nine_ball_state.push_out_active {
+            self.nine_ball_state.push_out_active = false;
+            self.nine_ball_state.push_out_available = false;
+            self.nine_ball_state.active_player = opponent;
+            return TurnOutcome::PushOutOffered;
         }
 
-        if foul_committed {
+        let mut fouls = shot.fouls.clone();
+
+        // Rotation rule check: Must hit lowest active ball first (Section 8 / Section 19)
+        if let Some(first) = shot.first_ball_struck {
+            if first.0 != self.nine_ball_state.lowest_active_ball
+                && !fouls.contains(&FoulType::WrongBallFirst)
+            {
+                fouls.push(FoulType::WrongBallFirst);
+            }
+        } else if !fouls.contains(&FoulType::NoContact) {
+            fouls.push(FoulType::NoContact);
+        }
+
+        let is_legal = fouls.is_empty();
+
+        // Break Shot handling (Section 6 & Section 16)
+        if self.nine_ball_state.is_break_shot {
+            self.nine_ball_state.is_break_shot = false;
+
+            if is_legal {
+                self.nine_ball_state.push_out_available = true;
+                if shot.pocketed_balls.contains(&BallId(9)) {
+                    if self.nine_ball_state.wpa_spot_9ball_on_break {
+                        // WPA Rule 16: Spot 9-ball on foot spot, shooter continues
+                        self.nine_ball_state.respawn_9ball_needed = true;
+                        return TurnOutcome::KeepTurn;
+                    } else {
+                        // League Rule: Immediate Win
+                        self.nine_ball_state.winner = Some(active);
+                        return TurnOutcome::GameOver { winner: active };
+                    }
+                }
+            } else {
+                self.nine_ball_state.push_out_available = false;
+                if shot.pocketed_balls.contains(&BallId(9)) {
+                    self.nine_ball_state.respawn_9ball_needed = true;
+                }
+                self.nine_ball_state.consecutive_fouls[active] += 1;
+                self.nine_ball_state.active_player = opponent;
+                return TurnOutcome::SwitchTurn { ball_in_hand: true };
+            }
+        } else {
+            self.nine_ball_state.push_out_available = false;
+        }
+
+        // Foul Handling & 3-Foul Rule (Section 25)
+        if !is_legal {
             self.nine_ball_state.consecutive_fouls[active] += 1;
+            if shot.pocketed_balls.contains(&BallId(9)) {
+                // Section 19: Spot 9-ball if pocketed on a foul
+                self.nine_ball_state.respawn_9ball_needed = true;
+            }
+
             if self.nine_ball_state.consecutive_fouls[active] >= 3 {
-                // 3 consecutive fouls -> loss
+                // 3 consecutive fouls -> loss of rack/game
                 self.nine_ball_state.winner = Some(opponent);
                 return TurnOutcome::GameOver { winner: opponent };
             }
+
             self.nine_ball_state.active_player = opponent;
             return TurnOutcome::SwitchTurn { ball_in_hand: true };
         }
@@ -289,17 +372,21 @@ impl RuleEngine {
         // Reset foul counter on legal shot
         self.nine_ball_state.consecutive_fouls[active] = 0;
 
-        // Check 9-ball potted
+        // Legal 9-Ball Pocketed -> Immediate Win (Section 15)
         if shot.pocketed_balls.contains(&BallId(9)) {
             self.nine_ball_state.winner = Some(active);
             return TurnOutcome::GameOver { winner: active };
         }
 
         // Advance lowest active ball if potted
+        let mut pocketed_lowest = false;
         for ball in &shot.pocketed_balls {
             if ball.0 == self.nine_ball_state.lowest_active_ball {
-                self.nine_ball_state.lowest_active_ball += 1;
+                pocketed_lowest = true;
             }
+        }
+        if pocketed_lowest {
+            self.nine_ball_state.lowest_active_ball += 1;
         }
 
         if !shot.pocketed_balls.is_empty() {
@@ -382,6 +469,76 @@ mod tests {
             Some(BallGroup::Stripes)
         );
         assert!(!engine.eight_ball_state.table_open);
+    }
+
+    #[test]
+    fn test_nine_ball_rotation_and_no_rail_foul() {
+        let mut engine = RuleEngine::new(GameVariant::NineBall, BallId(0));
+        engine.nine_ball_state.is_break_shot = false;
+        engine.nine_ball_state.lowest_active_ball = 1;
+
+        // Wrong ball hit first (hit 3 instead of 1)
+        let wrong_ball_shot = ShotResult {
+            cue_ball_scratched: false,
+            first_ball_struck: Some(BallId(3)),
+            pocketed_balls: vec![],
+            rail_hit_after_contact: true,
+            fouls: vec![],
+            is_valid: true,
+        };
+
+        let outcome = engine.process_nine_ball(&wrong_ball_shot);
+        assert_eq!(outcome, TurnOutcome::SwitchTurn { ball_in_hand: true });
+        assert_eq!(engine.nine_ball_state.consecutive_fouls[0], 1);
+    }
+
+    #[test]
+    fn test_nine_ball_push_out() {
+        let mut engine = RuleEngine::new(GameVariant::NineBall, BallId(0));
+        let break_shot = ShotResult {
+            cue_ball_scratched: false,
+            first_ball_struck: Some(BallId(1)),
+            pocketed_balls: vec![BallId(2)],
+            rail_hit_after_contact: true,
+            fouls: vec![],
+            is_valid: true,
+        };
+
+        engine.process_nine_ball(&break_shot);
+        assert!(engine.nine_ball_state.push_out_available);
+
+        assert!(engine.nine_ball_state.announce_push_out().is_ok());
+        assert!(engine.nine_ball_state.push_out_active);
+
+        let push_out_shot = ShotResult {
+            cue_ball_scratched: false,
+            first_ball_struck: None,
+            pocketed_balls: vec![],
+            rail_hit_after_contact: false,
+            fouls: vec![FoulType::NoContact],
+            is_valid: false,
+        };
+
+        let outcome = engine.process_nine_ball(&push_out_shot);
+        assert_eq!(outcome, TurnOutcome::PushOutOffered);
+    }
+
+    #[test]
+    fn test_nine_ball_wpa_spot_on_break() {
+        let mut engine = RuleEngine::new(GameVariant::NineBall, BallId(0));
+        let break_9ball_shot = ShotResult {
+            cue_ball_scratched: false,
+            first_ball_struck: Some(BallId(1)),
+            pocketed_balls: vec![BallId(9)],
+            rail_hit_after_contact: true,
+            fouls: vec![],
+            is_valid: true,
+        };
+
+        let outcome = engine.process_nine_ball(&break_9ball_shot);
+        assert_eq!(outcome, TurnOutcome::KeepTurn);
+        assert!(engine.nine_ball_state.respawn_9ball_needed);
+        assert_eq!(engine.nine_ball_state.winner, None);
     }
 
     #[test]

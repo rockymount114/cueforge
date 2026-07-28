@@ -1,6 +1,6 @@
 /**
  * CueForge Studio — Interactive Web UI Simulation Engine
- * Phase 1 Core Physics & Visual Renderer
+ * Phase 1 Core Physics & Visual Renderer with WPA 9-Ball Rule Enforcement
  */
 
 const CanvasWidth = 1000;
@@ -20,14 +20,12 @@ const ScalePX = BedWidth / TableLengthMeters; // Pixels per meter
 
 const BallRadiusMeters = 0.028575; // 2.25 inch diameter
 const BallRadiusPX = BallRadiusMeters * ScalePX;
-const BallMass = 0.170; // kg
 
 const RestitutionBall = 0.95;
 const RestitutionRail = 0.85;
 const Gravity = 9.81;
 const SlidingFrictionCoef = 0.20;
 const RollingFrictionCoef = 0.015;
-const SpinningFrictionCoef = 0.005;
 
 const PocketRadiusPX = 24;
 
@@ -70,7 +68,6 @@ class Ball {
     this.id = id;
     this.pos = new Vector2(x, y); // Canvas pixels
     this.vel = new Vector2(0, 0); // Pixels per second
-    this.angVel = { x: 0, y: 0, z: 0 }; // rad/s
     this.active = true;
     this.state = 'Stationary'; // 'Stationary', 'Sliding', 'Rolling', 'Pocketed'
   }
@@ -95,13 +92,21 @@ class CueForgeSimulation {
     this.isDraggingAim = false;
     this.isBallInHand = false;
 
+    // Shot tracking for WPA 9-Ball rules
+    this.firstBallHit = null;
+    this.railHitAfterContact = false;
+    this.pocketedThisShot = [];
+    this.lowestActiveBall = 1;
+    this.consecutiveFouls = [0, 0];
+    this.activePlayer = 0;
+
     this.pockets = [
-      new Vector2(BedX, BedY),                             // Top Left
-      new Vector2(BedX + BedWidth / 2, BedY - 6),           // Top Center
-      new Vector2(BedX + BedWidth, BedY),                  // Top Right
-      new Vector2(BedX, BedY + BedHeight),                  // Bottom Left
-      new Vector2(BedX + BedWidth / 2, BedY + BedHeight + 6),// Bottom Center
-      new Vector2(BedX + BedWidth, BedY + BedHeight),       // Bottom Right
+      new Vector2(BedX, BedY),                              // Top Left
+      new Vector2(BedX + BedWidth / 2, BedY - 6),            // Top Center
+      new Vector2(BedX + BedWidth, BedY),                   // Top Right
+      new Vector2(BedX, BedY + BedHeight),                   // Bottom Left
+      new Vector2(BedX + BedWidth / 2, BedY + BedHeight + 6), // Bottom Center
+      new Vector2(BedX + BedWidth, BedY + BedHeight),        // Bottom Right
     ];
 
     this.stats = { shots: 0, pots: 0, fouls: 0 };
@@ -110,6 +115,12 @@ class CueForgeSimulation {
     this.initNineBallRack();
     this.bindEvents();
     this.startLoop();
+  }
+
+  getLowestRemainingBall() {
+    const activeObj = this.balls.filter(b => b.id > 0 && b.active);
+    if (activeObj.length === 0) return 9;
+    return Math.min(...activeObj.map(b => b.id));
   }
 
   initNineBallRack() {
@@ -121,13 +132,13 @@ class CueForgeSimulation {
     const rackX = BedX + BedWidth * 0.72;
     const rackY = BedY + BedHeight * 0.5;
     const r = BallRadiusPX;
-    const dx = r * 1.732; // sqrt(3) * r
+    const dx = r * 1.732;
 
     // 9-Ball Diamond Rack layout
     const positions = [
       { id: 1, x: rackX, y: rackY },
       { id: 2, x: rackX + dx, y: rackY - r },
-      { id: 9, x: rackX + dx, y: rackY + r }, // 9 in middle
+      { id: 9, x: rackX + dx, y: rackY + r }, // 9 in center
       { id: 3, x: rackX + 2 * dx, y: rackY - 2 * r },
       { id: 8, x: rackX + 2 * dx, y: rackY },
       { id: 4, x: rackX + 2 * dx, y: rackY + 2 * r },
@@ -142,7 +153,9 @@ class CueForgeSimulation {
 
     this.aimAngle = 0;
     this.isBallInHand = false;
-    this.logEvent('9-Ball rack set. Aim line ready.', 'info');
+    this.lowestActiveBall = 1;
+    this.consecutiveFouls = [0, 0];
+    this.logEvent('WPA 9-Ball rack set. Aim line ready (Target: Ball #1).', 'info');
     this.updateAIDetails();
   }
 
@@ -166,27 +179,6 @@ class CueForgeSimulation {
       spawnY = Math.max(minY, Math.min(maxY, customPos.y));
     }
 
-    // Verify non-overlapping with active balls
-    let attempts = 0;
-    while (attempts < 30) {
-      let overlap = false;
-      for (const b of this.balls) {
-        if (b.id !== 0 && b.active) {
-          if (new Vector2(spawnX, spawnY).dist(b.pos) < BallRadiusPX * 2 + 2) {
-            overlap = true;
-            break;
-          }
-        }
-      }
-      if (!overlap) break;
-      spawnY += BallRadiusPX * 2.2;
-      if (spawnY > BedY + BedHeight - BallRadiusPX) {
-        spawnY = BedY + BallRadiusPX + 10;
-        spawnX += BallRadiusPX * 2.2;
-      }
-      attempts++;
-    }
-
     cueBall.pos = new Vector2(spawnX, spawnY);
     cueBall.vel = new Vector2(0, 0);
     cueBall.active = true;
@@ -195,8 +187,25 @@ class CueForgeSimulation {
     this.isBallInHand = true;
     document.getElementById('shot-status').innerText = 'Ball in Hand (Click table to place)';
     document.getElementById('shot-status').style.color = '#3b82f6';
-    this.logEvent('Cue ball returned to table (Ball in Hand). Click table to position.', 'info');
+    this.logEvent('Cue ball returned to table (Ball in Hand).', 'info');
     this.updateAIDetails();
+  }
+
+  spotNineBall() {
+    let ball9 = this.balls.find(b => b.id === 9);
+    const footSpotX = BedX + BedWidth * 0.72;
+    const footSpotY = BedY + BedHeight * 0.5;
+
+    if (!ball9) {
+      ball9 = new Ball(9, footSpotX, footSpotY);
+      this.balls.push(ball9);
+    } else {
+      ball9.pos = new Vector2(footSpotX, footSpotY);
+      ball9.vel = new Vector2(0, 0);
+      ball9.active = true;
+      ball9.state = 'Stationary';
+    }
+    this.logEvent('WPA Rule: 9-Ball spotted on foot spot.', 'info');
   }
 
   bindEvents() {
@@ -235,27 +244,22 @@ class CueForgeSimulation {
       this.isDraggingAim = false;
     });
 
-    // Place Cue Ball / Ball in Hand Button
     document.getElementById('btn-place-cue').addEventListener('click', () => {
       this.respawnCueBall();
     });
 
-    // Cue Strike Button
     document.getElementById('btn-strike').addEventListener('click', () => {
       this.fireCueStrike();
     });
 
-    // Reset Rack Button
     document.getElementById('btn-reset-rack').addEventListener('click', () => {
       this.initNineBallRack();
     });
 
-    // AI Hint Button
     document.getElementById('btn-ai-hint').addEventListener('click', () => {
       this.applyAIRecommendation();
     });
 
-    // Sliders
     const powerSlider = document.getElementById('power-slider');
     powerSlider.addEventListener('input', (e) => {
       this.cuePower = parseFloat(e.target.value);
@@ -268,7 +272,6 @@ class CueForgeSimulation {
       document.getElementById('elevation-val').innerText = this.cueElevation;
     });
 
-    // Spin Target Drag
     const spinTarget = document.getElementById('spin-target');
     const spinCrosshair = document.getElementById('spin-crosshair');
 
@@ -341,8 +344,10 @@ class CueForgeSimulation {
     }
 
     this.isBallInHand = false;
+    this.firstBallHit = null;
+    this.railHitAfterContact = false;
+    this.pocketedThisShot = [];
 
-    // Apply impulse to cue ball
     const speedPX = this.cuePower * ScalePX;
     const dirX = Math.cos(this.aimAngle);
     const dirY = Math.sin(this.aimAngle);
@@ -356,7 +361,7 @@ class CueForgeSimulation {
     document.getElementById('shot-status').innerText = 'Shot Executing...';
     document.getElementById('shot-status').style.color = '#f59e0b';
 
-    this.logEvent(`Cue struck (Speed: ${this.cuePower.toFixed(2)} m/s, Aim: ${(this.aimAngle * 180 / Math.PI).toFixed(1)}°)`, 'info');
+    this.logEvent(`Cue struck (Power: ${this.cuePower.toFixed(2)} m/s, Rotation Target: Ball #${this.getLowestRemainingBall()})`, 'info');
   }
 
   applyAIRecommendation() {
@@ -366,28 +371,72 @@ class CueForgeSimulation {
       cueBall = this.balls.find(b => b.id === 0);
     }
 
-    const target = this.balls.find(b => b.id > 0 && b.active);
+    const lowestId = this.getLowestRemainingBall();
+    const target = this.balls.find(b => b.id === lowestId && b.active);
     if (!cueBall || !target) return;
 
     const targetPos = target.pos;
-    const pocket = this.pockets[2]; // Top Right corner pocket
+    const pocket = this.pockets[2]; // Top Right corner
 
     const ghostX = targetPos.x - (pocket.x - targetPos.x) / targetPos.dist(pocket) * (2 * BallRadiusPX);
     const ghostY = targetPos.y - (pocket.y - targetPos.y) / targetPos.dist(pocket) * (2 * BallRadiusPX);
 
     this.aimAngle = Math.atan2(ghostY - cueBall.pos.y, ghostX - cueBall.pos.x);
-    this.logEvent('AI Coach calculated ghost-ball aim angle.', 'info');
+    this.logEvent(`AI Coach targeted lowest active Ball #${lowestId}.`, 'info');
     this.updateAIDetails();
   }
 
   updateAIDetails() {
     const cueBall = this.balls.find(b => b.id === 0);
-    const target = this.balls.find(b => b.id > 0 && b.active);
+    const lowestId = this.getLowestRemainingBall();
+    const target = this.balls.find(b => b.id === lowestId && b.active);
 
     if (cueBall && target) {
-      document.getElementById('ai-target-ball').innerText = `Ball #${target.id}`;
+      document.getElementById('ai-target-ball').innerText = `Ball #${lowestId}`;
       document.getElementById('ai-target-pocket').innerText = 'Corner Right';
       document.getElementById('ai-cut-angle').innerText = `${((this.aimAngle * 180 / Math.PI) % 90).toFixed(1)}°`;
+    }
+  }
+
+  evaluateShotRules() {
+    const lowest = this.getLowestRemainingBall();
+    let fouls = [];
+
+    const cueBall = this.balls.find(b => b.id === 0);
+    if (!cueBall || !cueBall.active) {
+      fouls.push('Scratch');
+    }
+
+    if (!this.firstBallHit) {
+      fouls.push('No Contact');
+    } else if (this.firstBallHit.id !== lowest) {
+      fouls.push(`Wrong Ball First (Hit #${this.firstBallHit.id}, Required #${lowest})`);
+    }
+
+    if (this.firstBallHit && this.pocketedThisShot.length === 0 && !this.railHitAfterContact) {
+      fouls.push('No Rail Contact After Impact');
+    }
+
+    if (fouls.length > 0) {
+      this.stats.fouls += 1;
+      document.getElementById('stat-fouls').innerText = this.stats.fouls;
+      this.logEvent(`FOUL COMMITTED: ${fouls.join(' | ')} (Ball in Hand given)`, 'foul');
+
+      if (this.pocketedThisShot.includes(9)) {
+        this.spotNineBall();
+      }
+
+      this.respawnCueBall();
+    } else {
+      // Legal Shot
+      if (this.pocketedThisShot.includes(9)) {
+        this.logEvent('VICTORY! Legally pocketed the 9-Ball!', 'pocket');
+        alert('🎉 VICTORY! Legally pocketed the 9-Ball!');
+      } else if (this.pocketedThisShot.length > 0) {
+        this.logEvent(`Legal Shot: Pocketed ${this.pocketedThisShot.length} ball(s).`, 'pocket');
+      } else {
+        this.logEvent('Legal Safety / Position shot completed.', 'info');
+      }
     }
   }
 
@@ -397,7 +446,7 @@ class CueForgeSimulation {
     const mu_s = SlidingFrictionCoef;
     const mu_r = RollingFrictionCoef;
 
-    // 1. Resolve pairwise ball-ball collisions
+    // 1. Pairwise Collisions
     for (let i = 0; i < this.balls.length; i++) {
       for (let j = i + 1; j < this.balls.length; j++) {
         const b1 = this.balls[i];
@@ -422,7 +471,12 @@ class CueForgeSimulation {
             b1.state = 'Sliding';
             b2.state = 'Sliding';
 
-            // Push apart to avoid overlap sticking
+            // Track First Contact for Rotation Rule
+            if (!this.firstBallHit) {
+              if (b1.id === 0) this.firstBallHit = b2;
+              else if (b2.id === 0) this.firstBallHit = b1;
+            }
+
             const overlap = (minDist - dist) / 2;
             b1.pos = b1.pos.sub(normal.mul(overlap));
             b2.pos = b2.pos.add(normal.mul(overlap));
@@ -433,46 +487,42 @@ class CueForgeSimulation {
       }
     }
 
-    // 2. Resolve cushion rail collisions & pocket capture
+    // 2. Rail & Pocket Captures
     for (const b of this.balls) {
       if (!b.active) continue;
 
-      // Pocket Capture check
       for (let pIdx = 0; pIdx < this.pockets.length; pIdx++) {
         if (b.pos.dist(this.pockets[pIdx]) < PocketRadiusPX) {
           b.active = false;
           b.state = 'Pocketed';
           b.vel = new Vector2(0, 0);
 
-          if (b.id === 0) {
-            this.stats.fouls += 1;
-            document.getElementById('stat-fouls').innerText = this.stats.fouls;
-            this.logEvent('FOUL: Cue Ball scratched into pocket!', 'foul');
-          } else {
+          if (b.id !== 0) {
+            this.pocketedThisShot.push(b.id);
             this.stats.pots += 1;
             document.getElementById('stat-pots').innerText = this.stats.pots;
             this.logEvent(`Ball #${b.id} pocketed!`, 'pocket');
           }
-
-          const acc = this.stats.shots > 0 ? (this.stats.pots / this.stats.shots * 100).toFixed(0) + '%' : '0%';
-          document.getElementById('stat-acc').innerText = acc;
         }
       }
 
       if (!b.active) continue;
 
-      // Cushion Rail rebound
       const left = BedX + BallRadiusPX;
       const right = BedX + BedWidth - BallRadiusPX;
       const top = BedY + BallRadiusPX;
       const bottom = BedY + BedHeight - BallRadiusPX;
 
-      if (b.pos.x < left) { b.pos.x = left; b.vel.x = -b.vel.x * RestitutionRail; }
-      if (b.pos.x > right) { b.pos.x = right; b.vel.x = -b.vel.x * RestitutionRail; }
-      if (b.pos.y < top) { b.pos.y = top; b.vel.y = -b.vel.y * RestitutionRail; }
-      if (b.pos.y > bottom) { b.pos.y = bottom; b.vel.y = -b.vel.y * RestitutionRail; }
+      let hitRail = false;
+      if (b.pos.x < left) { b.pos.x = left; b.vel.x = -b.vel.x * RestitutionRail; hitRail = true; }
+      if (b.pos.x > right) { b.pos.x = right; b.vel.x = -b.vel.x * RestitutionRail; hitRail = true; }
+      if (b.pos.y < top) { b.pos.y = top; b.vel.y = -b.vel.y * RestitutionRail; hitRail = true; }
+      if (b.pos.y > bottom) { b.pos.y = bottom; b.vel.y = -b.vel.y * RestitutionRail; hitRail = true; }
 
-      // Friction integration
+      if (hitRail && this.firstBallHit) {
+        this.railHitAfterContact = true;
+      }
+
       const speed = b.vel.len();
       if (speed > 5) {
         activeMovement = true;
@@ -494,16 +544,7 @@ class CueForgeSimulation {
 
     if (!activeMovement && this.isSimulating) {
       this.isSimulating = false;
-
-      // Check if cue ball was pocketed (scratched)
-      const cueBall = this.balls.find(b => b.id === 0);
-      if (!cueBall || !cueBall.active) {
-        this.respawnCueBall();
-      } else {
-        document.getElementById('shot-status').innerText = 'Ready for Shot';
-        document.getElementById('shot-status').style.color = '#10b981';
-        this.logEvent('Shot complete. Table stationary.', 'info');
-      }
+      this.evaluateShotRules();
     }
   }
 
@@ -519,27 +560,22 @@ class CueForgeSimulation {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, CanvasWidth, CanvasHeight);
 
-    // 1. Draw Table Wooden Rail Frame
     ctx.fillStyle = '#2d1810';
     ctx.fillRect(0, 0, CanvasWidth, CanvasHeight);
 
-    // Slate Cloth Bed
     ctx.fillStyle = '#0d5c3a';
     ctx.fillRect(BedX, BedY, BedWidth, BedHeight);
 
-    // Cushion Borders
     ctx.strokeStyle = '#0a422a';
     ctx.lineWidth = 4;
     ctx.strokeRect(BedX, BedY, BedWidth, BedHeight);
 
-    // Diamonds / Sights along rails
     ctx.fillStyle = '#f8fafc';
     for (let i = 1; i <= 3; i++) {
       ctx.beginPath(); ctx.arc(BedX + (BedWidth / 4) * i, BedY / 2, 3, 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.arc(BedX + (BedWidth / 4) * i, CanvasHeight - BedY / 2, 3, 0, Math.PI * 2); ctx.fill();
     }
 
-    // 2. Draw Pockets
     for (const pocket of this.pockets) {
       ctx.fillStyle = '#111827';
       ctx.beginPath();
@@ -550,13 +586,11 @@ class CueForgeSimulation {
       ctx.stroke();
     }
 
-    // 3. Draw Aim Guide Line & Ghost Ball (if not simulating)
     const cueBall = this.balls.find(b => b.id === 0);
     if (cueBall && cueBall.active && !this.isSimulating) {
       const aimDirX = Math.cos(this.aimAngle);
       const aimDirY = Math.sin(this.aimAngle);
 
-      // Raycast aim line to first obstacle
       let minRayDist = 800;
       for (const target of this.balls) {
         if (target.id === 0 || !target.active) continue;
@@ -578,7 +612,6 @@ class CueForgeSimulation {
       const ghostX = cueBall.pos.x + aimDirX * minRayDist;
       const ghostY = cueBall.pos.y + aimDirY * minRayDist;
 
-      // Draw dashed aim line
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
       ctx.lineWidth = 2;
       ctx.setLineDash([6, 6]);
@@ -588,14 +621,12 @@ class CueForgeSimulation {
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Draw Ghost Ball outline
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(ghostX, ghostY, BallRadiusPX, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Cue Stick graphic
       const cueLength = 220;
       const cueStartX = cueBall.pos.x - aimDirX * 30;
       const cueStartY = cueBall.pos.y - aimDirY * 30;
@@ -610,23 +641,19 @@ class CueForgeSimulation {
       ctx.stroke();
     }
 
-    // 4. Draw Balls
     for (const ball of this.balls) {
       if (!ball.active) continue;
 
-      // Shadow
       ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
       ctx.beginPath();
       ctx.arc(ball.pos.x + 3, ball.pos.y + 4, BallRadiusPX, 0, Math.PI * 2);
       ctx.fill();
 
-      // Ball Base
       ctx.fillStyle = BallColors[ball.id] || '#fff';
       ctx.beginPath();
       ctx.arc(ball.pos.x, ball.pos.y, BallRadiusPX, 0, Math.PI * 2);
       ctx.fill();
 
-      // Highlights
       const grad = ctx.createRadialGradient(
         ball.pos.x - BallRadiusPX * 0.3,
         ball.pos.y - BallRadiusPX * 0.3,
@@ -644,7 +671,6 @@ class CueForgeSimulation {
       ctx.arc(ball.pos.x, ball.pos.y, BallRadiusPX, 0, Math.PI * 2);
       ctx.fill();
 
-      // Ball Number Label (for non-cue ball)
       if (ball.id > 0) {
         ctx.fillStyle = '#ffffff';
         ctx.beginPath();
@@ -677,7 +703,6 @@ class CueForgeSimulation {
   }
 }
 
-// Initialize on DOM Ready
 window.addEventListener('DOMContentLoaded', () => {
   const canvas = document.getElementById('table-canvas');
   window.cueForgeApp = new CueForgeSimulation(canvas);
