@@ -94,6 +94,7 @@ class Vector2 {
     const l = this.len();
     return l > 1e-9 ? this.div(l) : new Vector2(0, 0);
   }
+  distSq(v) { return this.sub(v).lenSq(); }
   dist(v) { return this.sub(v).len(); }
 }
 
@@ -238,6 +239,7 @@ class CueForgeSimulation {
     this.isSimulating = false;
     this.isDraggingAim = false;
     this.isBallInHand = false;
+    this.selectedPocketIndex = 'auto';
 
     // Cloth Parameters & Environmental State
     this.currentClothKey = 'simonis_860';
@@ -514,55 +516,77 @@ class CueForgeSimulation {
       document.getElementById('elevation-val').innerText = this.cueElevation;
     });
 
-    const spinTarget = document.getElementById('spin-target');
-    const spinCrosshair = document.getElementById('spin-crosshair');
+    const setupSpinTarget = (targetId, crosshairId, xValId, yValId, resetBtnId) => {
+      const targetEl = document.getElementById(targetId);
+      const crosshairEl = document.getElementById(crosshairId);
+      const resetBtn = document.getElementById(resetBtnId);
+      if (!targetEl || !crosshairEl) return;
 
-    spinTarget.addEventListener('mousedown', (e) => {
-      const updateSpin = (ev) => {
-        const rect = spinTarget.getBoundingClientRect();
-        let x = (ev.clientX - rect.left - rect.width / 2) / (rect.width / 2);
-        let y = -(ev.clientY - rect.top - rect.height / 2) / (rect.height / 2);
+      targetEl.addEventListener('mousedown', (e) => {
+        const updateSpin = (ev) => {
+          const rect = targetEl.getBoundingClientRect();
+          let x = (ev.clientX - rect.left - rect.width / 2) / (rect.width / 2);
+          let y = -(ev.clientY - rect.top - rect.height / 2) / (rect.height / 2);
 
-        const len = Math.sqrt(x * x + y * y);
-        if (len > 0.85) {
-          x = (x / len) * 0.85;
-          y = (y / len) * 0.85;
-        }
+          const len = Math.sqrt(x * x + y * y);
+          if (len > 0.85) {
+            x = (x / len) * 0.85;
+            y = (y / len) * 0.85;
+          }
 
-        this.spinOffsetX = x;
-        this.spinOffsetY = y;
+          this.spinOffsetX = x;
+          this.spinOffsetY = y;
 
-        spinCrosshair.style.left = `${(x * 50 + 50)}%`;
-        spinCrosshair.style.top = `${(-y * 50 + 50)}%`;
+          crosshairEl.style.left = `${(x * 50 + 50)}%`;
+          crosshairEl.style.top = `${(-y * 50 + 50)}%`;
 
-        document.getElementById('spin-x-val').innerText = x.toFixed(2);
-        document.getElementById('spin-y-val').innerText = y.toFixed(2);
+          const xEl = document.getElementById(xValId);
+          const yEl = document.getElementById(yValId);
+          if (xEl) xEl.innerText = x.toFixed(2);
+          if (yEl) yEl.innerText = y.toFixed(2);
 
+          this.updateAIDetails();
+          this.drawAimGraph();
+        };
+
+        updateSpin(e);
+        const onMove = (ev) => updateSpin(ev);
+        const onUp = () => {
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+      });
+
+      if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+          this.spinOffsetX = 0;
+          this.spinOffsetY = 0;
+          crosshairEl.style.left = '50%';
+          crosshairEl.style.top = '50%';
+          const xEl = document.getElementById(xValId);
+          const yEl = document.getElementById(yValId);
+          if (xEl) xEl.innerText = '0.00';
+          if (yEl) yEl.innerText = '0.00';
+
+          this.updateAIDetails();
+          this.drawAimGraph();
+        });
+      }
+    };
+
+    setupSpinTarget('spin-target', 'spin-crosshair', 'spin-x-val', 'spin-y-val', 'btn-reset-spin');
+    setupSpinTarget('aim-spin-target', 'aim-spin-crosshair', 'aim-spin-x-val', 'aim-spin-y-val', 'btn-reset-aim-spin');
+
+    const pocketSelect = document.getElementById('pocket-select');
+    if (pocketSelect) {
+      pocketSelect.addEventListener('change', (e) => {
+        this.selectedPocketIndex = e.target.value;
         this.updateAIDetails();
         this.drawAimGraph();
-      };
-
-      updateSpin(e);
-      const onMove = (ev) => updateSpin(ev);
-      const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-      };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-    });
-
-    document.getElementById('btn-reset-spin').addEventListener('click', () => {
-      this.spinOffsetX = 0;
-      this.spinOffsetY = 0;
-      spinCrosshair.style.left = '50%';
-      spinCrosshair.style.top = '50%';
-      document.getElementById('spin-x-val').innerText = '0.00';
-      document.getElementById('spin-y-val').innerText = '0.00';
-
-      this.updateAIDetails();
-      this.drawAimGraph();
-    });
+      });
+    }
   }
 
   updateAimFromMouse(e) {
@@ -613,6 +637,124 @@ class CueForgeSimulation {
     this.logEvent(`Cue struck (Power: ${this.cuePower.toFixed(2)} m/s, Target: Ball #${this.targetBallBeforeShot})`, 'info');
   }
 
+  distToSegment(p, v, w) {
+    const l2 = v.distSq(w);
+    if (l2 < 1e-6) return p.dist(v);
+    let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    const proj = new Vector2(v.x + t * (w.x - v.x), v.y + t * (w.y - v.y));
+    return p.dist(proj);
+  }
+
+  getPocketNames() {
+    return [
+      "Top-Left Corner",
+      "Top-Center Side",
+      "Top-Right Corner",
+      "Bottom-Left Corner",
+      "Bottom-Center Side",
+      "Bottom-Right Corner"
+    ];
+  }
+
+  findOptimalPottingPocket(cueBall, target) {
+    if (!cueBall || !target) {
+      return { index: 2, pocket: this.pockets[2], name: "Top-Right Corner", cutAngleDeg: 24.5, ghostPos: target ? target.pos : new Vector2(0,0) };
+    }
+
+    const targetPos = target.pos;
+    const cuePos = cueBall.pos;
+    const names = this.getPocketNames();
+
+    let bestPocketObj = null;
+    let minScore = Infinity;
+
+    for (let i = 0; i < this.pockets.length; i++) {
+      const pocket = this.pockets[i];
+      const pocketDir = pocket.sub(targetPos).normalize();
+      const ghostPos = targetPos.sub(pocketDir.mul(2 * BallRadiusPX));
+
+      // Vector from cue ball to ghost ball
+      const cueToGhost = ghostPos.sub(cuePos);
+      const cueToGhostDir = cueToGhost.normalize();
+
+      // Cut angle between cue approach and pocket direction
+      const dot = cueToGhostDir.dot(pocketDir);
+      const rawAngleRad = Math.acos(Math.max(-1.0, Math.min(1.0, dot)));
+      let cutAngleDeg = (rawAngleRad * 180 / Math.PI) % 180;
+      if (cutAngleDeg > 90) cutAngleDeg = 180 - cutAngleDeg;
+
+      // Ignore cut angles > 85 degrees (virtually impossible direct pot)
+      if (cutAngleDeg > 85) continue;
+
+      // Obstruction Check: Check if any other active ball blocks cue -> ghost or target -> pocket
+      let isBlocked = false;
+      for (const b of this.balls) {
+        if (!b.active || b.id === 0 || b.id === target.id) continue;
+
+        // Check cue -> ghost line
+        if (this.distToSegment(b.pos, cuePos, ghostPos) < BallRadiusPX * 1.7) {
+          isBlocked = true;
+          break;
+        }
+        // Check target -> pocket line
+        if (this.distToSegment(b.pos, targetPos, pocket) < BallRadiusPX * 1.7) {
+          isBlocked = true;
+          break;
+        }
+      }
+
+      // Distance calculation
+      const distCueToGhost = cueToGhost.len();
+      const distTargetToPocket = pocket.dist(targetPos);
+
+      // Score: cut angle is heavily weighted (smaller cut angle is much easier to make),
+      // plus distance factor and obstruction penalty
+      const score = cutAngleDeg * 2.5 + distCueToGhost * 0.05 + distTargetToPocket * 0.03 + (isBlocked ? 1000 : 0);
+
+      if (score < minScore) {
+        minScore = score;
+        bestPocketObj = {
+          index: i,
+          pocket: pocket,
+          name: names[i],
+          cutAngleDeg: cutAngleDeg,
+          ghostPos: ghostPos,
+          isBlocked: isBlocked
+        };
+      }
+    }
+
+    // Fallback if all cut angles > 85 deg or all blocked: choose pocket with minimum cut angle
+    if (!bestPocketObj) {
+      let minCut = Infinity;
+      for (let i = 0; i < this.pockets.length; i++) {
+        const pocket = this.pockets[i];
+        const pocketDir = pocket.sub(targetPos).normalize();
+        const ghostPos = targetPos.sub(pocketDir.mul(2 * BallRadiusPX));
+        const cueToGhostDir = ghostPos.sub(cuePos).normalize();
+        const dot = cueToGhostDir.dot(pocketDir);
+        const rawAngleRad = Math.acos(Math.max(-1.0, Math.min(1.0, dot)));
+        let cutAngleDeg = (rawAngleRad * 180 / Math.PI) % 180;
+        if (cutAngleDeg > 90) cutAngleDeg = 180 - cutAngleDeg;
+
+        if (cutAngleDeg < minCut) {
+          minCut = cutAngleDeg;
+          bestPocketObj = {
+            index: i,
+            pocket: pocket,
+            name: names[i],
+            cutAngleDeg: cutAngleDeg,
+            ghostPos: ghostPos,
+            isBlocked: false
+          };
+        }
+      }
+    }
+
+    return bestPocketObj;
+  }
+
   applyAIRecommendation() {
     let cueBall = this.balls.find(b => b.id === 0);
     if (!cueBall || !cueBall.active) {
@@ -624,15 +766,49 @@ class CueForgeSimulation {
     const target = this.balls.find(b => b.id === lowestId && b.active);
     if (!cueBall || !target) return;
 
-    const targetPos = target.pos;
-    const pocket = this.pockets[2]; // Top Right corner
+    const bestShot = this.findOptimalPottingPocket(cueBall, target);
+    if (!bestShot) return;
 
-    const ghostX = targetPos.x - (pocket.x - targetPos.x) / targetPos.dist(pocket) * (2 * BallRadiusPX);
-    const ghostY = targetPos.y - (pocket.y - targetPos.y) / targetPos.dist(pocket) * (2 * BallRadiusPX);
-
-    this.aimAngle = Math.atan2(ghostY - cueBall.pos.y, ghostX - cueBall.pos.x);
-    this.logEvent(`AI Coach targeted lowest active Ball #${lowestId}.`, 'info');
+    const ghostPos = bestShot.ghostPos;
+    this.aimAngle = Math.atan2(ghostPos.y - cueBall.pos.y, ghostPos.x - cueBall.pos.x);
+    this.logEvent(`AI Coach targeted Ball #${lowestId} into ${bestShot.name} (${bestShot.cutAngleDeg.toFixed(1)}° cut).`, 'info');
     this.updateAIDetails();
+    this.drawAimGraph();
+  }
+
+  getBestTargetPocket(targetPos) {
+    const names = this.getPocketNames();
+    const cueBall = this.balls.find(b => b.id === 0);
+    const target = this.balls.find(b => b.pos.dist(targetPos) < 1.0 && b.active);
+
+    if (this.selectedPocketIndex !== undefined && this.selectedPocketIndex !== 'auto') {
+      const idx = parseInt(this.selectedPocketIndex, 10);
+      if (!isNaN(idx) && this.pockets[idx]) {
+        return {
+          index: idx,
+          pocket: this.pockets[idx],
+          name: names[idx]
+        };
+      }
+    }
+
+    // Auto Mode: evaluate best pocket for potting target ball
+    if (cueBall && target) {
+      const optimal = this.findOptimalPottingPocket(cueBall, target);
+      if (optimal) {
+        return {
+          index: optimal.index,
+          pocket: optimal.pocket,
+          name: optimal.name
+        };
+      }
+    }
+
+    return {
+      index: 2,
+      pocket: this.pockets[2],
+      name: names[2]
+    };
   }
 
   getCutAngleAndHitFraction(targetPos, pocketPos) {
@@ -668,16 +844,17 @@ class CueForgeSimulation {
     const target = this.balls.find(b => b.id === lowestId && b.active);
 
     if (cueBall && target) {
-      const pocket = this.pockets[2];
+      const targetAnalysis = this.getBestTargetPocket(target.pos);
+      const pocket = targetAnalysis.pocket;
       const cutInfo = this.getCutAngleAndHitFraction(target.pos, pocket);
 
       document.getElementById('ai-target-ball').innerText = `Ball #${lowestId}`;
-      document.getElementById('ai-target-pocket').innerText = 'Corner Right';
+      document.getElementById('ai-target-pocket').innerText = targetAnalysis.name;
       document.getElementById('ai-cut-angle').innerText = cutInfo.displayString;
 
       const cutBadge = document.getElementById('cut-angle-badge');
       if (cutBadge) {
-        cutBadge.innerText = `${cutInfo.angleDeg.toFixed(1)}° • ${cutInfo.fractionLabel}`;
+        cutBadge.innerText = `${cutInfo.angleDeg.toFixed(1)}° • ${targetAnalysis.name}`;
       }
     }
   }
@@ -864,7 +1041,7 @@ class CueForgeSimulation {
 
     ctx.clearRect(0, 0, w, h);
 
-    // Dark Slate Canvas Background
+    // Dark Slate Background
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(0, 0, w, h);
 
@@ -882,37 +1059,98 @@ class CueForgeSimulation {
     const lowestId = this.getLowestRemainingBall();
     const target = this.balls.find(b => b.id === lowestId && b.active);
 
-    const pocket = this.pockets[2];
-    let cutInfo = { angleDeg: 24.5, fractionLabel: '1/2 Ball' };
-
-    if (cueBall && target) {
-      cutInfo = this.getCutAngleAndHitFraction(target.pos, pocket);
+    if (!cueBall || !target) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '12px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('No Active Target Ball', w / 2, h / 2);
+      return;
     }
 
-    const R = 22; // Ball radius for clean diagram rendering
-    const objPos = new Vector2(w - 75, h / 2 + 6);
+    const targetAnalysis = this.getBestTargetPocket(target.pos);
+    const pocket = targetAnalysis.pocket;
+    const cutInfo = this.getCutAngleAndHitFraction(target.pos, pocket);
 
-    // Ghost Ball position along cut direction
-    const rad = cutInfo.angleDeg * Math.PI / 180;
-    const ghostPos = new Vector2(
-      objPos.x - 2 * R * Math.cos(rad * 0.4),
-      objPos.y + 2 * R * Math.sin(rad * 0.4)
-    );
+    // 1. AIM LINE IS ALWAYS VERTICAL (90 DEGREES ON SCREEN)
+    // Cue path goes straight UP along x = w / 2 = 140
+    const R = 28; // Ball radius in diagram
+    const ghostPos = new Vector2(w * 0.50, h * 0.68); // Ghost Ball center
 
-    // 1. Aim Line (Ghost Ball Center -> Object Ball Center -> Pocket)
+    // Determine cut side (left vs right cut) from cross product
+    const vecCueToTarget = target.pos.sub(cueBall.pos);
+    const vecTargetToPocket = pocket.sub(target.pos);
+    const crossZ = vecCueToTarget.x * vecTargetToPocket.y - vecCueToTarget.y * vecTargetToPocket.x;
+    const cutSide = crossZ >= 0 ? 1 : -1;
+
+    const cutRad = (cutInfo.angleDeg * Math.PI / 180) * cutSide;
+
+    // Target Ball center deflected by cut angle relative to vertical aim direction (0, -1)
+    const impactDir = new Vector2(Math.sin(cutRad), -Math.cos(cutRad));
+    const objPos = ghostPos.add(impactDir.mul(2 * R));
+
+    // Contact point where Ghost Ball touches Target Ball
+    const contactPos = ghostPos.add(impactDir.mul(R));
+
+    // 2. DRAW VERTICAL AIM LINE (Cue stick trajectory)
     ctx.strokeStyle = '#10b981';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.moveTo(ghostPos.x - 30, ghostPos.y - (ghostPos.y - objPos.y) * 0.5);
-    ctx.lineTo(objPos.x + 35, objPos.y + (objPos.y - ghostPos.y) * 0.5);
+    ctx.moveTo(ghostPos.x, h - 8);
+    ctx.lineTo(ghostPos.x, ghostPos.y);
     ctx.stroke();
 
     ctx.fillStyle = '#34d399';
-    ctx.font = 'bold 9px Inter, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText('Aim Line →', Math.max(10, ghostPos.x - 45), ghostPos.y - 14);
+    ctx.font = 'bold 8.5px Inter, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('Aim Line (Vertical) ↑', ghostPos.x - 8, h - 14);
 
-    // 2. Static Fractional Hit Reference Lines (Full, 3/4, 1/2, 1/4, 1/8)
+    // 3. DOTTED LINE FROM CONTACT POINT TO TARGET POCKET
+    ctx.save();
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([5, 4]);
+
+    const pocketLineEnd = objPos.add(impactDir.mul(65));
+    ctx.beginPath();
+    ctx.moveTo(contactPos.x, contactPos.y);
+    ctx.lineTo(pocketLineEnd.x, pocketLineEnd.y);
+    ctx.stroke();
+
+    // Arrowhead pointing towards Target Pocket
+    const arrowSize = 7;
+    const arrowAngle = Math.atan2(impactDir.y, impactDir.x);
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath();
+    ctx.moveTo(pocketLineEnd.x, pocketLineEnd.y);
+    ctx.lineTo(
+      pocketLineEnd.x - arrowSize * Math.cos(arrowAngle - Math.PI / 6),
+      pocketLineEnd.y - arrowSize * Math.sin(arrowAngle - Math.PI / 6)
+    );
+    ctx.lineTo(
+      pocketLineEnd.x - arrowSize * Math.cos(arrowAngle + Math.PI / 6),
+      pocketLineEnd.y - arrowSize * Math.sin(arrowAngle + Math.PI / 6)
+    );
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Pocket Label at end of line
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 9px Inter, sans-serif';
+    ctx.textAlign = cutSide >= 0 ? 'left' : 'right';
+    ctx.fillText(`Line to ${targetAnalysis.name} →`, pocketLineEnd.x + (cutSide >= 0 ? 6 : -6), pocketLineEnd.y);
+
+    // 4. CUT ANGLE ARC & INDICATOR
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    const startArcAngle = -Math.PI / 2;
+    const endArcAngle = -Math.PI / 2 + cutRad;
+    ctx.arc(ghostPos.x, ghostPos.y, 22, Math.min(startArcAngle, endArcAngle), Math.max(startArcAngle, endArcAngle));
+    ctx.stroke();
+
+    // 5. FRACTIONAL HIT MARKINGS (Full, 3/4, 1/2, 1/4, 1/8)
     const refFractions = [
       { offsetFactor: 0.0, label: 'Full' },
       { offsetFactor: 0.5, label: '3/4' },
@@ -921,90 +1159,94 @@ class CueForgeSimulation {
       { offsetFactor: 1.75, label: '1/8' },
     ];
 
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
     ctx.lineWidth = 1;
     ctx.setLineDash([2, 2]);
 
     for (const ref of refFractions) {
-      const refX = objPos.x - 2 * R + ref.offsetFactor * R;
+      const refX = ghostPos.x + ref.offsetFactor * (R * 0.8) * cutSide;
       ctx.beginPath();
-      ctx.moveTo(refX, 22);
-      ctx.lineTo(refX, h - 16);
+      ctx.moveTo(refX, h - 22);
+      ctx.lineTo(refX, h - 8);
       ctx.stroke();
 
       ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
-      ctx.font = '8px JetBrains Mono, monospace';
+      ctx.font = '7.5px JetBrains Mono, monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(ref.label, refX, h - 5);
+      ctx.fillText(ref.label, refX, h - 1);
     }
     ctx.setLineDash([]);
 
-    // 3. Ghost Ball (Translucent Outlined Circle)
-    ctx.fillStyle = 'rgba(56, 189, 248, 0.15)';
+    // 6. GHOST BALL (Cue Ball at Impact Overlap)
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.12)';
     ctx.beginPath();
     ctx.arc(ghostPos.x, ghostPos.y, R, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 4]);
+
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.arc(ghostPos.x, ghostPos.y, R, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // 4. Target Object Ball (Solid, Colored with Ball ID)
+    // 7. TARGET OBJECT BALL (3D Radial Gradient Sphere)
     const targetColor = BallColors[lowestId] || '#facc15';
-    ctx.fillStyle = targetColor;
+    const ballGrad = ctx.createRadialGradient(
+      objPos.x - R * 0.3, objPos.y - R * 0.3, R * 0.1,
+      objPos.x, objPos.y, R
+    );
+    ballGrad.addColorStop(0, '#ffffff');
+    ballGrad.addColorStop(0.35, targetColor);
+    ballGrad.addColorStop(1, '#713f12');
+
+    ctx.fillStyle = ballGrad;
     ctx.beginPath();
     ctx.arc(objPos.x, objPos.y, R, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#0f172a';
+
+    ctx.strokeStyle = '#1e293b';
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
+    // Ball Number Circle Spot
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.arc(objPos.x, objPos.y, R * 0.42, 0, Math.PI * 2);
+    ctx.arc(objPos.x, objPos.y, R * 0.38, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 10px Inter, sans-serif';
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 11px Inter, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(lowestId.toString(), objPos.x, objPos.y + 1);
+    ctx.fillText(lowestId.toString(), objPos.x, objPos.y + 0.5);
 
-    // 5. Live Selected Contact Point (Bold Vertical Dotted Line & Tag)
-    const contactX = objPos.x - R * Math.cos(rad * 0.4);
-    const contactY = objPos.y + R * Math.sin(rad * 0.4);
-
-    ctx.strokeStyle = 'rgba(239, 68, 68, 0.95)';
-    ctx.lineWidth = 2.0;
-    ctx.setLineDash([3, 3]);
-    ctx.beginPath();
-    ctx.moveTo(contactX, 14);
-    ctx.lineTo(contactX, h - 18);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Impact Contact Point Accent Dot
+    // 8. CONTACT POINT MARKER (Glowing Red Dot)
+    ctx.shadowColor = '#ef4444';
+    ctx.shadowBlur = 8;
     ctx.fillStyle = '#ef4444';
     ctx.beginPath();
-    ctx.arc(contactX, contactY, 4.5, 0, Math.PI * 2);
+    ctx.arc(contactPos.x, contactPos.y, 4.5, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
+
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // "contact point" Pointer Label
-    ctx.fillStyle = '#ef4444';
-    ctx.font = 'bold 8px Inter, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillText('contact point ▼', contactX, 4);
+    // "Contact Point" Tag Label
+    ctx.fillStyle = '#f87171';
+    ctx.font = 'bold 8.5px Inter, sans-serif';
+    ctx.textAlign = cutSide >= 0 ? 'right' : 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Contact Point →', contactPos.x + (cutSide >= 0 ? -8 : 8), contactPos.y);
 
-    // Top Header Readout
+    // 9. TOP HEADER READOUT
     ctx.fillStyle = '#fbbf24';
-    ctx.font = 'bold 11px JetBrains Mono, monospace';
+    ctx.font = 'bold 10.5px JetBrains Mono, monospace';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillText(`${cutInfo.angleDeg.toFixed(1)}° • ${cutInfo.fractionLabel}`, 10, 6);
+    ctx.fillText(`${cutInfo.angleDeg.toFixed(1)}° • ${cutInfo.fractionLabel}`, 8, 6);
   }
 
   draw() {

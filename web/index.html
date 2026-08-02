@@ -81,12 +81,24 @@
             <span class="badge badge-cut" id="cut-angle-badge">24.5° Cut</span>
           </div>
           <div class="aim-canvas-container">
-            <canvas id="aim-canvas" width="280" height="140"></canvas>
+            <canvas id="aim-canvas" width="280" height="180"></canvas>
+          </div>
+          <div class="pocket-analysis-bar">
+            <label for="pocket-select">Target Pocket:</label>
+            <select id="pocket-select" class="pocket-dropdown">
+              <option value="auto">Auto (Best Pocket Angle)</option>
+              <option value="0">Top-Left Corner</option>
+              <option value="1">Top-Center Side</option>
+              <option value="2">Top-Right Corner</option>
+              <option value="3">Bottom-Left Corner</option>
+              <option value="4">Bottom-Center Side</option>
+              <option value="5">Bottom-Right Corner</option>
+            </select>
           </div>
           <div class="aim-legend">
             <div class="legend-item"><span class="dot dot-cue"></span> Cue Ball</div>
-            <div class="legend-item"><span class="dot dot-ghost"></span> Ghost Ball</div>
-            <div class="legend-item"><span class="dot dot-target"></span> Target Ball</div>
+            <div class="legend-item"><span class="dot dot-contact"></span> Contact Point</div>
+            <div class="legend-item"><span class="dot dot-pocket"></span> Dotted Pocket Line</div>
           </div>
         </div>
 

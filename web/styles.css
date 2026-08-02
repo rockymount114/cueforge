@@ -321,11 +321,37 @@ input[type="range"] {
   border-radius: 4px;
 }
 
+.pocket-analysis-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.pocket-dropdown {
+  background: rgba(30, 41, 59, 0.9);
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 0.72rem;
+  outline: none;
+  cursor: pointer;
+}
+
+.pocket-dropdown:focus {
+  border-color: #38bdf8;
+}
+
 .aim-legend {
   display: flex;
   justify-content: space-around;
   font-size: 0.7rem;
   color: var(--text-muted);
+  margin-top: 6px;
 }
 
 .legend-item {
@@ -342,6 +368,8 @@ input[type="range"] {
 .dot-cue { background: #ffffff; border: 1px solid #94a3b8; }
 .dot-ghost { background: transparent; border: 1.5px dashed #38bdf8; }
 .dot-target { background: #facc15; }
+.dot-contact { background: #ef4444; box-shadow: 0 0 4px #ef4444; }
+.dot-pocket { background: #38bdf8; border: 1px dashed #38bdf8; }
 
 /* English / Spin Selector */
 .spin-selector-container {
